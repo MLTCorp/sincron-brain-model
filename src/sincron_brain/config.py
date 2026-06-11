@@ -62,6 +62,8 @@ class AuditConfig(BaseModel):
     """Local JSONL audit log for memory tool usage and sleep decisions."""
 
     enabled: bool = True
+    retention_days: int = 90
+    max_file_mb: int = 25
 
 
 class VaultConfig(BaseModel):

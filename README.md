@@ -130,6 +130,15 @@ The log is meant for debugging and user trust: it stores IDs, counts, scores,
 timestamps, and short reasons, but redacts full content and common sensitive
 fields such as API keys, tokens, passwords, and secrets.
 
+Audit is enabled by default with bounded retention:
+
+```toml
+[audit]
+enabled = true
+retention_days = 90
+max_file_mb = 25
+```
+
 ## Vault structure
 
 ```

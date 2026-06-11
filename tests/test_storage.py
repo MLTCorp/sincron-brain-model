@@ -1,5 +1,6 @@
 """Storage round-trips: .md file <-> Memory model <-> SQLite index."""
 
+import json
 from datetime import UTC, datetime, timedelta
 
 from sincron_brain import storage
@@ -66,6 +67,49 @@ def test_audit_can_be_disabled(tmp_path):
     storage.ensure_vault(config)
     assert storage.write_audit(config, "tool.stats") is None
     assert storage.read_audit(config) == []
+
+
+def test_audit_prunes_events_older_than_retention(tmp_path):
+    config = make_config(tmp_path)
+    old = (datetime.now(UTC) - timedelta(days=91)).isoformat()
+    recent = (datetime.now(UTC) - timedelta(days=1)).isoformat()
+    config.audit_file.write_text(
+        "\n".join(
+            [
+                json.dumps({"ts": old, "event": "old"}),
+                json.dumps({"ts": recent, "event": "recent"}),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    storage.write_audit(config, "new")
+
+    events = [event["event"] for event in storage.read_audit(config)]
+    assert events == ["recent", "new"]
+
+
+def test_audit_prunes_by_max_file_size(tmp_path):
+    config = make_config(tmp_path)
+    config.audit.max_file_mb = 1
+    now = datetime.now(UTC).isoformat()
+    large = "x" * 600_000
+    config.audit_file.write_text(
+        "\n".join(
+            [
+                json.dumps({"ts": now, "event": "older", "padding": large}),
+                json.dumps({"ts": now, "event": "newer", "padding": large}),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    storage.write_audit(config, "newest")
+
+    events = [event["event"] for event in storage.read_audit(config)]
+    assert events == ["newer", "newest"]
 
 
 def test_index_stores_emotion_floor(tmp_path):

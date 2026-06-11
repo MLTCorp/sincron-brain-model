@@ -68,7 +68,7 @@ O app host pode lidar com qualquer modalidade — quando converter para texto, c
 8. **Reindex incremental por score descendente**: se trocar provider/modelo do judge, re-processa memórias de score alto primeiro. Sistema fica usável durante migração.
 9. **Decaimento de score**: piso global = 1, nunca 0. Nenhuma memória é apagada sozinha — só perde superficialidade.
 10. **Emoção como feedback sobre a IA**: emoção narrada no fato vira conteúdo; feedback positivo ou negativo sobre resposta, lembrança, esquecimento ou correção da IA aumenta o `emotion_floor`.
-11. **Audit local por padrão**: o vault mantém `_audit.jsonl` com chamadas de tools e decisões do sono, sem conteúdo completo de memória e com campos sensíveis redigidos.
+11. **Audit local por padrão**: o vault mantém `_audit.jsonl` com chamadas de tools e decisões do sono, sem conteúdo completo de memória e com campos sensíveis redigidos. Retenção default: 90 dias ou 25 MB.
 
 ---
 
@@ -173,6 +173,9 @@ sleep.finished
 
 Regras:
 
+- Ligado por padrão.
+- Retenção default: `retention_days = 90`.
+- Tamanho default: `max_file_mb = 25`.
 - Não gravar conteúdo completo de memória ou mensagem do usuário.
 - Redigir campos com nomes sensíveis (`content`, `api_key`, `token`, `password`, `secret`).
 - Gravar IDs, contagens, scores, `emotion_floor`, `access_count`, motivo curto e timestamps.

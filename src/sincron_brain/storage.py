@@ -12,7 +12,7 @@ import sqlite3
 import unicodedata
 import uuid
 from collections.abc import Iterable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import frontmatter
@@ -61,6 +61,7 @@ def write_audit(config: VaultConfig, event: str, **payload) -> Path | None:
     if not config.audit.enabled:
         return None
     config.vault_path.mkdir(parents=True, exist_ok=True)
+    _prune_audit(config)
     row = {
         "ts": _utcnow_iso(),
         "event": event,
@@ -100,6 +101,53 @@ def _sanitize_audit(value):
     if isinstance(value, datetime):
         return value.isoformat()
     return value
+
+
+def _prune_audit(config: VaultConfig) -> None:
+    if not config.audit_file.exists():
+        return
+
+    lines = [line for line in config.audit_file.read_text(encoding="utf-8").splitlines() if line]
+    lines = _retain_recent_audit_lines(lines, config.audit.retention_days)
+    lines = _retain_audit_size(lines, config.audit.max_file_mb)
+    config.audit_file.write_text(_join_jsonl(lines), encoding="utf-8")
+
+
+def _retain_recent_audit_lines(lines: list[str], retention_days: int) -> list[str]:
+    if retention_days <= 0:
+        return lines
+    cutoff = datetime.now(UTC) - timedelta(days=retention_days)
+    kept = []
+    for line in lines:
+        try:
+            ts = _parse_dt(json.loads(line).get("ts"))
+        except (json.JSONDecodeError, TypeError, ValueError):
+            kept.append(line)
+            continue
+        if ts >= cutoff:
+            kept.append(line)
+    return kept
+
+
+def _retain_audit_size(lines: list[str], max_file_mb: int) -> list[str]:
+    if max_file_mb <= 0:
+        return lines
+    max_bytes = max_file_mb * 1024 * 1024
+    kept_reversed = []
+    total = 0
+    for line in reversed(lines):
+        line_bytes = len((line + "\n").encode("utf-8"))
+        if kept_reversed and total + line_bytes > max_bytes:
+            break
+        kept_reversed.append(line)
+        total += line_bytes
+    return list(reversed(kept_reversed))
+
+
+def _join_jsonl(lines: list[str]) -> str:
+    if not lines:
+        return ""
+    return "\n".join(lines) + "\n"
 
 
 def slugify(text: str) -> str:
