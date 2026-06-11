@@ -85,8 +85,8 @@ def init(
     console.print("[bold]Add to your MCP client config:[/]")
     console.print(
         f'  "sincron-brain": {{\n'
-        f'    "command": "uvx",\n'
-        f'    "args": ["sincron-brain-model"],\n'
+        f'    "command": "sincron-brain",\n'
+        f'    "args": ["serve"],\n'
         f'    "env": {{ "SINCRON_BRAIN_VAULT": "{vault_path}" }}\n'
         f"  }}"
     )

@@ -20,29 +20,43 @@ See [CLAUDE.md](CLAUDE.md) for full architectural decisions.
 
 ## Install
 
-Requires Python 3.11+.
+Windows / PowerShell one-command install:
 
-```bash
-# Install the CLI globally (or use uvx for ephemeral runs)
-pip install sincron-brain-model
-# or
-uv tool install sincron-brain-model
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/MLTCorp/sincron-brain-model/main/install.ps1 | iex"
+```
+
+The installer is plug-and-play: it installs `uv` for the current user if needed,
+then installs the `sincron-brain` CLI from this GitHub repository.
+
+If you already trust your PowerShell execution policy, this shorter command also works:
+
+```powershell
+irm https://raw.githubusercontent.com/MLTCorp/sincron-brain-model/main/install.ps1 | iex
 ```
 
 ## Quick start
 
-```bash
+```powershell
 # Create a vault. Prompts for provider unless --yes is set.
 sincron-brain init
 
 # Export the API key for your judge provider (matches the prompt choice)
-export ANTHROPIC_API_KEY=sk-ant-...
+$env:ANTHROPIC_API_KEY = "sk-ant-..."
 
 # (Optional) verify it works
 sincron-brain stats
 
 # Force a sleep run on demand
 sincron-brain sleep-now
+```
+
+For a live test vault:
+
+```powershell
+sincron-brain init --path C:\Temp\teste_brain\memory --yes
+$env:SINCRON_BRAIN_VAULT = "C:\Temp\teste_brain\memory"
+sincron-brain stats
 ```
 
 ## Development
@@ -71,8 +85,8 @@ Add to your MCP client config (Claude Desktop / Claude Code / Cursor / etc.):
 {
   "mcpServers": {
     "sincron-brain": {
-      "command": "uvx",
-      "args": ["sincron-brain-model", "serve"],
+      "command": "sincron-brain",
+      "args": ["serve"],
       "env": {
         "SINCRON_BRAIN_VAULT": "/absolute/path/to/your/memory",
         "ANTHROPIC_API_KEY": "sk-ant-..."

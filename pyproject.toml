@@ -45,8 +45,8 @@ dev = [
 sincron-brain = "sincron_brain.cli:app"
 
 [project.urls]
-Homepage = "https://github.com/sincron-digital/sincron-brain-model"
-Repository = "https://github.com/sincron-digital/sincron-brain-model"
+Homepage = "https://github.com/MLTCorp/sincron-brain-model"
+Repository = "https://github.com/MLTCorp/sincron-brain-model"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/sincron_brain"]
