@@ -44,6 +44,30 @@ def test_search_fts_any_returns_partial_matches(tmp_path):
     assert "x" in [h["id"] for h in any_mode]  # ANY-mode: any token, hits
 
 
+def test_audit_log_redacts_sensitive_content(tmp_path):
+    config = make_config(tmp_path)
+    storage.write_audit(
+        config,
+        "tool.remember",
+        content="do not log me",
+        api_key="secret",
+        memory_ids=["m1"],
+    )
+    events = storage.read_audit(config)
+    assert events[0]["event"] == "tool.remember"
+    assert events[0]["content"] == "[redacted]"
+    assert events[0]["api_key"] == "[redacted]"
+    assert events[0]["memory_ids"] == ["m1"]
+
+
+def test_audit_can_be_disabled(tmp_path):
+    config = VaultConfig(vault_path=tmp_path)
+    config.audit.enabled = False
+    storage.ensure_vault(config)
+    assert storage.write_audit(config, "tool.stats") is None
+    assert storage.read_audit(config) == []
+
+
 def test_index_stores_emotion_floor(tmp_path):
     config = make_config(tmp_path)
     memory = Memory(id="m1", major_tags=["trabalho"], emotion_floor=10, synopsis="s")

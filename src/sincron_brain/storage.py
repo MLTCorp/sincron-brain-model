@@ -53,6 +53,55 @@ def _utcnow_iso() -> str:
     return datetime.now(UTC).isoformat()
 
 
+SENSITIVE_KEYS = {"content", "api_key", "apikey", "token", "password", "secret"}
+
+
+def write_audit(config: VaultConfig, event: str, **payload) -> Path | None:
+    """Append a safe JSONL audit event. Never log full memory/user content."""
+    if not config.audit.enabled:
+        return None
+    config.vault_path.mkdir(parents=True, exist_ok=True)
+    row = {
+        "ts": _utcnow_iso(),
+        "event": event,
+        **_sanitize_audit(payload),
+    }
+    with config.audit_file.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+    return config.audit_file
+
+
+def read_audit(config: VaultConfig) -> list[dict]:
+    """Read audit events for diagnostics and tests."""
+    if not config.audit_file.exists():
+        return []
+    return [
+        json.loads(line)
+        for line in config.audit_file.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+
+
+def _sanitize_audit(value):
+    if isinstance(value, dict):
+        clean = {}
+        for key, item in value.items():
+            if key.lower() in SENSITIVE_KEYS:
+                clean[key] = "[redacted]"
+            else:
+                clean[key] = _sanitize_audit(item)
+        return clean
+    if isinstance(value, list):
+        return [_sanitize_audit(item) for item in value]
+    if isinstance(value, tuple):
+        return [_sanitize_audit(item) for item in value]
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return value
+
+
 def slugify(text: str) -> str:
     """Lowercase ASCII slug, safe as filename and id."""
     text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")

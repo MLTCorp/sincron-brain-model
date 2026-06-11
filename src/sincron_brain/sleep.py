@@ -25,14 +25,24 @@ def run_sleep(config: VaultConfig, decide: Decider | None = None) -> dict:
     decide = decide or reconcile.create_only
     start = time.monotonic()
     created = merged = reactivated = 0
+    storage.write_audit(config, "sleep.started")
 
     with storage.open_db(config) as conn:
         for path, draft in storage.iter_drafts(config):
-            outcome, _ = reconcile.reconcile_draft(conn, draft, config, decide)
+            outcome, memory = reconcile.reconcile_draft(conn, draft, config, decide)
             if outcome == "merged":
                 merged += 1
             else:
                 created += 1
+            storage.write_audit(
+                config,
+                "sleep.draft_processed",
+                draft_id=draft.id,
+                outcome=outcome,
+                memory_id=memory.id,
+                score=memory.score,
+                emotion_floor=memory.emotion_floor,
+            )
             path.unlink()
 
         _apply_decay(conn, config)
@@ -43,17 +53,28 @@ def run_sleep(config: VaultConfig, decide: Decider | None = None) -> dict:
                 if memory_id in seen:
                     continue
                 seen.add(memory_id)
-                if storage.reactivate_memory(config, conn, memory_id) is not None:
+                memory = storage.reactivate_memory(config, conn, memory_id)
+                if memory is not None:
                     reactivated += 1
+                    storage.write_audit(
+                        config,
+                        "sleep.memory_reactivated",
+                        event_id=event.id,
+                        memory_id=memory.id,
+                        score=memory.score,
+                        access_count=memory.access_count,
+                    )
             path.unlink()
 
-    return {
+    result = {
         "processed": created + merged,
         "created": created,
         "merged": merged,
         "reactivated": reactivated,
         "duration_seconds": round(time.monotonic() - start, 3),
     }
+    storage.write_audit(config, "sleep.finished", **result)
+    return result
 
 
 def _apply_decay(conn, config: VaultConfig) -> None:
@@ -66,6 +87,16 @@ def _apply_decay(conn, config: VaultConfig) -> None:
         if days < 1.0:
             continue
         new_score = scoring.decayed_score(r["score"], r["emotion_floor"], days, config.score)
+        if new_score != r["score"]:
+            storage.write_audit(
+                config,
+                "sleep.memory_decayed",
+                memory_id=r["id"],
+                old_score=r["score"],
+                new_score=new_score,
+                days=round(days, 3),
+                emotion_floor=r["emotion_floor"],
+            )
         conn.execute(
             "UPDATE memories SET score = ?, last_scored = ? WHERE id = ?",
             (new_score, now.isoformat(), r["id"]),

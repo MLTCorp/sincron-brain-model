@@ -116,12 +116,27 @@ Exploratory navigation does not reinforce memories: `list_major_tags()`, `list_t
 list/search synopses -> use_memories(ids) -> answer
 ```
 
+## Audit log
+
+Each vault keeps a local JSONL audit log at:
+
+```text
+memory/_audit.jsonl
+```
+
+It records tool usage and sleep decisions such as `tool.search`, `tool.use_memories`,
+`sleep.draft_processed`, `sleep.memory_decayed`, and `sleep.memory_reactivated`.
+The log is meant for debugging and user trust: it stores IDs, counts, scores,
+timestamps, and short reasons, but redacts full content and common sensitive
+fields such as API keys, tokens, passwords, and secrets.
+
 ## Vault structure
 
 ```
 memory/
 ├── _config.toml            ← provider, schedule, score tuning
 ├── _index.sqlite           ← rebuildable index (scores, FTS, metadata)
+├── _audit.jsonl            ← local audit trail, no full memory content
 ├── _draft/                 ← queue waiting for next sleep
 │   └── 20260513-143200-xyz.json
 ├── _reactivation/          ← memories used in final answer context

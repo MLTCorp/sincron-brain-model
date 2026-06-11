@@ -78,6 +78,15 @@ def remember(
     )
     storage.write_draft(config, item)
     queue_size = len(list(config.draft_dir.glob("*.json")))
+    storage.write_audit(
+        config,
+        "tool.remember",
+        draft_id=item.id,
+        source_type=source_type,
+        hint_tags=hint_tags or [],
+        has_asset_ref=asset_ref is not None,
+        queue_size=queue_size,
+    )
     return {
         "draft_id": item.id,
         "queued_at": item.timestamp.isoformat(),
@@ -97,7 +106,9 @@ def list_major_tags() -> list[dict]:
     """
     config = get_config()
     with storage.open_db(config) as conn:
-        return storage.list_major_tags(conn)
+        result = storage.list_major_tags(conn)
+    storage.write_audit(config, "tool.list_major_tags", result_count=len(result))
+    return result
 
 
 @mcp.tool()
@@ -118,7 +129,17 @@ def list_tags(major_tag: str, min_score: int = 0, limit: int = 50) -> list[dict]
     """
     config = get_config()
     with storage.open_db(config) as conn:
-        return storage.list_tags(conn, major_tag, min_score, limit)
+        result = storage.list_tags(conn, major_tag, min_score, limit)
+    storage.write_audit(
+        config,
+        "tool.list_tags",
+        major_tag=major_tag,
+        min_score=min_score,
+        limit=limit,
+        result_count=len(result),
+        memory_ids=[item["id"] for item in result],
+    )
+    return result
 
 
 @mcp.tool()
@@ -140,8 +161,9 @@ def read_memory(memory_id: str) -> dict | None:
     with storage.open_db(config) as conn:
         memory = storage.get_memory(config, conn, memory_id)
         if memory is None:
+            storage.write_audit(config, "tool.read_memory", memory_id=memory_id, found=False)
             return None
-        return {
+        result = {
             "id": memory.id,
             "major_tags": memory.major_tags,
             "synopsis": memory.synopsis,
@@ -152,6 +174,15 @@ def read_memory(memory_id: str) -> dict | None:
             "score": memory.score,
             "access_count": memory.access_count,
         }
+    storage.write_audit(
+        config,
+        "tool.read_memory",
+        memory_id=memory_id,
+        found=True,
+        score=memory.score,
+        access_count=memory.access_count,
+    )
+    return result
 
 
 @mcp.tool()
@@ -193,6 +224,14 @@ def use_memories(memory_ids: list[str], reason: str = "") -> dict:
                 }
             )
     if not found_ids:
+        storage.write_audit(
+            config,
+            "tool.use_memories",
+            memory_ids=memory_ids,
+            found_ids=[],
+            queued_reactivation=False,
+            reason=reason,
+        )
         return {"memories": [], "queued_reactivation": False, "event_id": None}
 
     event = ReactivationEvent(
@@ -201,6 +240,15 @@ def use_memories(memory_ids: list[str], reason: str = "") -> dict:
         reason=reason,
     )
     storage.write_reactivation(config, event)
+    storage.write_audit(
+        config,
+        "tool.use_memories",
+        memory_ids=memory_ids,
+        found_ids=found_ids,
+        queued_reactivation=True,
+        event_id=event.id,
+        reason=reason,
+    )
     return {
         "memories": memories,
         "queued_reactivation": True,
@@ -225,7 +273,16 @@ def search(query: str, limit: int = 20) -> list[dict]:
     """
     config = get_config()
     with storage.open_db(config) as conn:
-        return storage.search_fts(conn, query, limit)
+        result = storage.search_fts(conn, query, limit)
+    storage.write_audit(
+        config,
+        "tool.search",
+        query=query,
+        limit=limit,
+        result_count=len(result),
+        memory_ids=[item["id"] for item in result],
+    )
+    return result
 
 
 @mcp.tool()
@@ -244,7 +301,9 @@ def sleep_now() -> dict:
     from sincron_brain.sleep import run_sleep
 
     config = get_config()
-    return run_sleep(config, decide=judge.default_decider(config))
+    result = run_sleep(config, decide=judge.default_decider(config))
+    storage.write_audit(config, "tool.sleep_now", **result)
+    return result
 
 
 @mcp.tool()
@@ -260,6 +319,15 @@ def stats() -> dict:
     base["draft_queue"] = len(list(config.draft_dir.glob("*.json")))
     base["reactivation_queue"] = len(list(config.reactivation_dir.glob("*.json")))
     base["vault_path"] = str(config.vault_path)
+    base["audit_log"] = str(config.audit_file)
+    storage.write_audit(
+        config,
+        "tool.stats",
+        total=base["total"],
+        tags=base["tags"],
+        draft_queue=base["draft_queue"],
+        reactivation_queue=base["reactivation_queue"],
+    )
     return base
 
 

@@ -58,6 +58,12 @@ class CaptureConfig(BaseModel):
     )
 
 
+class AuditConfig(BaseModel):
+    """Local JSONL audit log for memory tool usage and sleep decisions."""
+
+    enabled: bool = True
+
+
 class VaultConfig(BaseModel):
     """Top-level vault configuration. Lives in <vault>/_config.toml."""
 
@@ -68,6 +74,7 @@ class VaultConfig(BaseModel):
     score: ScoreConfig = Field(default_factory=ScoreConfig)
     sleep: SleepConfig = Field(default_factory=SleepConfig)
     capture: CaptureConfig = Field(default_factory=CaptureConfig)
+    audit: AuditConfig = Field(default_factory=AuditConfig)
 
     @property
     def config_file(self) -> Path:
@@ -85,6 +92,10 @@ class VaultConfig(BaseModel):
     def reactivation_dir(self) -> Path:
         return self.vault_path / "_reactivation"
 
+    @property
+    def audit_file(self) -> Path:
+        return self.vault_path / "_audit.jsonl"
+
     def judge_api_key(self) -> str | None:
         return os.environ.get(self.judge.api_key_env)
 
@@ -96,6 +107,7 @@ class VaultConfig(BaseModel):
             "score": self.score.model_dump(),
             "sleep": self.sleep.model_dump(),
             "capture": self.capture.model_dump(),
+            "audit": self.audit.model_dump(),
         }
         self.config_file.write_bytes(tomli_w.dumps(payload).encode("utf-8"))
 

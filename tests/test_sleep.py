@@ -51,6 +51,10 @@ def test_run_sleep_creates_memory_and_clears_draft(tmp_path):
 
     assert result["created"] == 1
     assert not draft_path.exists()
+    events = storage.read_audit(config)
+    assert "sleep.started" in [event["event"] for event in events]
+    assert "sleep.draft_processed" in [event["event"] for event in events]
+    assert "sleep.finished" in [event["event"] for event in events]
     with storage.open_db(config) as conn:
         assert conn.execute("SELECT COUNT(*) AS c FROM memories").fetchone()["c"] == 1
 
@@ -104,6 +108,9 @@ def test_run_sleep_reactivates_used_memories_after_decay(tmp_path):
 
     assert result["reactivated"] == 1
     assert not event_path.exists()
+    events = storage.read_audit(config)
+    assert "sleep.memory_decayed" in [event["event"] for event in events]
+    assert "sleep.memory_reactivated" in [event["event"] for event in events]
     with storage.open_db(config) as conn:
         row = conn.execute(
             "SELECT score, access_count FROM memories WHERE id = ?", ("a",)
