@@ -103,8 +103,9 @@ Assim, o primeiro feedback pesa muito, os seguintes ainda contam, mas saturam. I
 Regra de reativação:
 
 - Consulta, busca e leitura exploratória não pontuam.
-- `read_memory()`/`get_memory()` apenas abre a memória; não altera `score`, `access_count` nem timestamps.
-- Memória usada na resposta passa por `use_memories()`, que grava evento em `_reactivation/`.
+- `list_major_tags()`, `list_tags()` e `search()` expõem tags/sinopses para decisão.
+- `use_memories()` é o caminho principal de sinopse para conteúdo completo; ele retorna os corpos das memórias e grava evento em `_reactivation/`.
+- `read_memory()`/`get_memory()` é escape hatch neutro de inspeção/compatibilidade; não altera `score`, `access_count` nem timestamps e não deve ser o caminho normal de resposta.
 - O sono processa rascunhos, aplica decaimento e só então reativa eventos de uso real.
 - Reativação consolidada aplica `score = 100`, incrementa `access_count` e atualiza `last_accessed`/`last_scored`.
 - Merge de rascunho em memória existente também volta a memória final para `score = 100`.
@@ -131,9 +132,15 @@ remember(
 ### Leitura
 - `list_major_tags()` → árvore enxuta dos temas.
 - `list_tags(major_tag, min_score=0)` → tags + sinopses + scores, ordenado por score DESC.
-- `read_memory(tag_id)` → conteúdo completo + asset_ref + go_deeper, sem pontuar.
-- `use_memories(memory_ids, reason="")` → conteúdo final para resposta + evento de reativação para o próximo sono.
+- `use_memories(memory_ids, reason="")` → conteúdo completo para resposta + evento de reativação para o próximo sono.
+- `read_memory(tag_id)` → inspeção neutra/compatibilidade, sem pontuar; não é o caminho normal de resposta.
 - `search(query)` → conveniência que combina os 3 num caminho otimizado.
+
+Fluxo plug-and-play esperado:
+
+```text
+list/search sinopses -> use_memories(ids) -> responder ao usuário
+```
 
 ### Operação
 - `sleep_now()` → força processamento manual do rascunho.

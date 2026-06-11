@@ -33,9 +33,11 @@ mcp = FastMCP(
     instructions=(
         "Long-term memory layer organized by Major Tag → Tag → synopsis → content. "
         "Use list_major_tags() to see themes, list_tags(major_tag) to see topics with "
-        "their synopses, then read_memory(id) to inspect candidate full content. "
-        "When specific memories will be used in the final answer, call use_memories(ids) "
-        "to fetch that answer context and queue reactivation for the next sleep. "
+        "their synopses, and search(query) as a fallback. Choose from synopses first. "
+        "When a memory's full content is needed to answer the user, call use_memories(ids); "
+        "that returns the content and queues reactivation for the next sleep. "
+        "read_memory(id) is neutral inspection/debug compatibility and should not be the "
+        "normal answer path. "
         "Use remember() to save new information for long-term recall. "
         "The actual indexing happens during the sleep job (nightly cron), not on remember()."
     ),
@@ -102,7 +104,9 @@ def list_major_tags() -> list[dict]:
 def list_tags(major_tag: str, min_score: int = 0, limit: int = 50) -> list[dict]:
     """List memory cards under a Major Tag, with their synopses.
 
-    Read the synopses to decide which full memory to open with read_memory().
+    Read synopses to decide which memories are likely useful. When full content
+    is needed for the answer, call use_memories(); it returns content and queues
+    reactivation. Avoid read_memory() in normal answer flow.
 
     Args:
         major_tag: The theme to drill into (from list_major_tags).
@@ -119,7 +123,7 @@ def list_tags(major_tag: str, min_score: int = 0, limit: int = 50) -> list[dict]
 
 @mcp.tool()
 def read_memory(memory_id: str) -> dict | None:
-    """Open the full content of a specific memory for inspection only.
+    """Inspect a memory without reactivation. Compatibility/debug escape hatch.
 
     Args:
         memory_id: The id returned by list_tags() or search().
@@ -129,8 +133,8 @@ def read_memory(memory_id: str) -> dict | None:
         Returns None if not found.
 
     Note:
-        This does not change score or access_count. Use use_memories() when a
-        memory is actually included in the answer context.
+        This does not change score or access_count and should not be the normal
+        answer path. Use use_memories() to obtain content for answering.
     """
     config = get_config()
     with storage.open_db(config) as conn:
@@ -152,11 +156,12 @@ def read_memory(memory_id: str) -> dict | None:
 
 @mcp.tool()
 def use_memories(memory_ids: list[str], reason: str = "") -> dict:
-    """Fetch memories for final answer context and queue sleep-time reactivation.
+    """Fetch full memory content for answering and queue sleep-time reactivation.
 
-    Use this after exploratory search/read steps, once you know which memories
-    will actually inform the answer. The score is not changed immediately; the
-    next sleep consolidates drafts first, then sets used final memories to 100.
+    This is the main plug-and-play path from synopsis to content. Use list_tags()
+    or search() to inspect synopses, then call this when the full memory is
+    needed to answer the user. The score is not changed immediately; the next
+    sleep consolidates drafts first, then sets these memories to 100.
 
     Args:
         memory_ids: IDs selected for the answer context.

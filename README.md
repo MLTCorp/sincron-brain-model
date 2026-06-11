@@ -89,8 +89,8 @@ After restart, your agent will have access to these tools:
 | `remember(content, source_type, asset_ref, hint_tags, metadata)` | Queue content for indexing at next sleep. |
 | `list_major_tags()` | List all themes in the vault. Entry point for navigation. |
 | `list_tags(major_tag, min_score, limit)` | List memory cards (id + synopsis) under a theme. |
-| `read_memory(memory_id)` | Inspect full content of a candidate memory without changing score. |
-| `use_memories(memory_ids, reason)` | Fetch final answer context and queue sleep-time reactivation. |
+| `use_memories(memory_ids, reason)` | Main path to fetch full memory content and queue sleep-time reactivation. |
+| `read_memory(memory_id)` | Neutral inspection/debug escape hatch; not the normal answer path. |
 | `search(query, limit)` | Full-text fallback when tag navigation isn't enough. |
 | `sleep_now()` | Force indexing job to run immediately. |
 | `stats()` | Vault diagnostics. |
@@ -108,7 +108,13 @@ max emotion_floor = 80
 
 Positive and negative feedback use the same table. For example, "you remembered this perfectly" and "I already told you this, don't ask again" are both priority signals. A sentence like "this client frustrated me by paying late" is stored as memory content, but does not raise the emotional floor by itself.
 
-Exploratory navigation does not reinforce memories: `list_major_tags()`, `list_tags()`, `search()`, and `read_memory()` are neutral. When the host/agent decides which memories will actually inform the final answer, it calls `use_memories()`. That queues a reactivation event; the next sleep consolidates drafts first, applies decay, then sets the used final memories back to `100`.
+Exploratory navigation does not reinforce memories: `list_major_tags()`, `list_tags()`, and `search()` return tags/synopses only. When full content is needed to answer the user, the agent calls `use_memories()`. That returns the memory bodies and queues a reactivation event; the next sleep consolidates drafts first, applies decay, then sets those memories back to `100`.
+
+`read_memory()` remains available as a neutral inspection/debug escape hatch for MCP clients that need it, but the plug-and-play answer flow is intentionally:
+
+```text
+list/search synopses -> use_memories(ids) -> answer
+```
 
 ## Vault structure
 
