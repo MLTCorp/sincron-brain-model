@@ -1,10 +1,9 @@
 """Behavior of the cognitive scoring rules.
 
 The emotional model (decided with the human partner, grounded in Izquierdo's
-"A arte de esquecer"): an emotional trigger adds a fixed step to a per-memory
-floor that decay can never erode — the durable-synapse analogue. The step also
-bumps the live score. The floor is capped so emotional memories stay durable
-without becoming permanently un-decayable above a baseline.
+"A arte de esquecer"): feedback/correction about the AI raises a per-memory
+floor using a decreasing impact table. Positive and negative feedback have the
+same priority; narrated emotion is content, not reinforcement.
 """
 
 from sincron_brain import scoring
@@ -17,21 +16,22 @@ def cfg(**overrides) -> ScoreConfig:
 
 def test_emotion_trigger_raises_floor_by_step():
     _, floor = scoring.apply_emotion_trigger(score=100, emotion_floor=0, cfg=cfg())
-    assert floor == 10
+    assert floor == 40
 
 
-def test_emotion_trigger_accumulates_floor_across_triggers():
+def test_emotion_trigger_uses_decreasing_impact_table():
     score, floor = 100, 0
     score, floor = scoring.apply_emotion_trigger(score, floor, cfg())
     score, floor = scoring.apply_emotion_trigger(score, floor, cfg())
-    assert floor == 20
+    score, floor = scoring.apply_emotion_trigger(score, floor, cfg())
+    assert floor == 70
 
 
 def test_emotion_floor_caps_at_emotion_bonus_max():
     score, floor = 100, 0
     for _ in range(10):
         score, floor = scoring.apply_emotion_trigger(score, floor, cfg())
-    assert floor == 30
+    assert floor == 80
 
 
 def test_emotion_trigger_bumps_score_but_clamps_at_initial():
@@ -41,8 +41,8 @@ def test_emotion_trigger_bumps_score_but_clamps_at_initial():
 
 def test_emotion_trigger_lifts_a_decayed_memory():
     score, floor = scoring.apply_emotion_trigger(score=2, emotion_floor=0, cfg=cfg())
-    assert score == 12
-    assert floor == 10
+    assert score == 42
+    assert floor == 40
 
 
 def test_decay_reduces_score_over_days():

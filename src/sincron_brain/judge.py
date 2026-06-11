@@ -38,7 +38,12 @@ SYSTEM_PROMPT = (
     "- A sinopse é um convite para ler o conteúdo: densa, e PRESERVANDO palavras-chave "
     "e nomes próprios (sistemas, pessoas, produtos) que tornam a memória localizável.\n"
     "- Prefira LINKAR (go_deeper) a duplicar conteúdo, e a inchar uma memória grande.\n"
-    "- emotional=true quando houver elogio, crítica ou emoção forte (positiva ou negativa).\n"
+    "- emotional=true somente quando houver feedback, correção ou cobrança do usuário "
+    "sobre a IA, a resposta, ou a capacidade de lembrar/usar a memória. Feedback positivo "
+    "e negativo têm o mesmo peso de prioridade.\n"
+    "- emotional=false quando a emoção estiver apenas dentro do fato narrado. Ex: "
+    "'Esse cliente me deixou frustrado porque atrasou o pagamento' é conteúdo da memória, "
+    "não reforço emocional do sistema.\n"
     "- target_id só pode ser o id de uma candidata listada."
 )
 

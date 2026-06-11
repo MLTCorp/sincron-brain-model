@@ -61,3 +61,12 @@ class DraftItem(BaseModel):
     hint_tags: list[str] = Field(default_factory=list)
     timestamp: datetime = Field(default_factory=_utcnow)
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ReactivationEvent(BaseModel):
+    """A record that specific memories were used in an answer context."""
+
+    id: str
+    memory_ids: list[str]
+    reason: str = ""
+    timestamp: datetime = Field(default_factory=_utcnow)

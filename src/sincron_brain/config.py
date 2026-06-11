@@ -28,9 +28,8 @@ class ScoreConfig(BaseModel):
     initial: int = 100
     floor: int = 1
     decay_per_day: float = 1.5
-    access_bonus: int = 8
-    emotion_floor_step: int = 10
-    emotion_bonus_max: int = 30
+    emotion_floor_increments: list[int] = Field(default_factory=lambda: [40, 20, 10, 5, 3, 2])
+    emotion_bonus_max: int = 80
 
 
 class SleepConfig(BaseModel):
@@ -81,6 +80,10 @@ class VaultConfig(BaseModel):
     @property
     def draft_dir(self) -> Path:
         return self.vault_path / "_draft"
+
+    @property
+    def reactivation_dir(self) -> Path:
+        return self.vault_path / "_reactivation"
 
     def judge_api_key(self) -> str | None:
         return os.environ.get(self.judge.api_key_env)

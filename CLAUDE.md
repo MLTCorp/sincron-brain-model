@@ -9,7 +9,7 @@ Qualquer projeto com IA pluga e ganha memória estruturada de longo prazo, inspi
 
 - **O que é**: uma camada de memória organizada, indexada e recuperável por tags hierárquicas + pontuação cognitiva. Plug-in para projetos de IA existentes.
 - **Como se instala**: MCP server. Desenvolvedor pluga no cliente dele (Claude Code, Claude Desktop, Cursor, app próprio via SDK MCP) e expõe as tools de memória pro agente.
-- **Inspiração**: Obsidian (vault de .md com links entre notas) + ponderação de relevância do cérebro humano (memórias decaem, sobem por frequência e por emoção).
+- **Inspiração**: Obsidian (vault de .md com links entre notas) + ponderação de relevância do cérebro humano (memórias decaem, são reativadas pelo uso e ganham piso durável quando o usuário reage à IA).
 
 ---
 
@@ -33,7 +33,7 @@ A IA do agente usa o próprio raciocínio dela pra navegar essa estrutura. Ela s
 
 - Receber conteúdo **textualizado** + metadados via tool `remember(...)`.
 - Indexar em estrutura .md + SQLite (FTS5 para fallback de busca textual).
-- Sistema de pontuação 1-100 com decaimento temporal, bônus por acesso, bônus por emoção.
+- Sistema de pontuação 1-100 com decaimento temporal, reativação e piso emocional não-decaente.
 - Sono noturno (cron customizável, default 03:00) que processa rascunhos via LLM-as-judge.
 - Sugerir/manter Go Deeper entre memórias relacionadas.
 - Tools de leitura/navegação pelo agente do host.
@@ -66,7 +66,49 @@ O app host pode lidar com qualquer modalidade — quando converter para texto, c
 6. **Provider configurável** (OpenAI, Anthropic, Voyage, Cohere, Gemini, Mistral, Jina, Azure, Bedrock, Ollama local, custom OpenAI-compatible). Camada de abstração via `litellm` ou equivalente. Mesma regra de provider serve pra qualquer uso de LLM no sistema (atualmente só o judge — sem embedding).
 7. **Uma chave de API só** pra rodar tudo (a do judge). Detecta chaves no ambiente (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, etc.) e usa o que tiver.
 8. **Reindex incremental por score descendente**: se trocar provider/modelo do judge, re-processa memórias de score alto primeiro. Sistema fica usável durante migração.
-9. **Decaimento de score**: piso = 1, nunca 0. Nenhuma memória é apagada sozinha — só perde superficialidade.
+9. **Decaimento de score**: piso global = 1, nunca 0. Nenhuma memória é apagada sozinha — só perde superficialidade.
+10. **Emoção como feedback sobre a IA**: emoção narrada no fato vira conteúdo; feedback positivo ou negativo sobre resposta, lembrança, esquecimento ou correção da IA aumenta o `emotion_floor`.
+
+---
+
+## Modelo De Pontuação
+
+A escala principal continua limitada a `1-100`.
+
+- **Memória nova** nasce com `score = 100`.
+- **Decaimento temporal** reduz o score em `1.5` ponto por dia desde `last_scored`.
+- **Piso global** é `1`: memória não é apagada sozinha.
+- **Piso emocional** (`emotion_floor`) impede que uma memória reforçada por feedback afunde abaixo de um limite durável.
+- **Teto do score** é `100`; não existe score acima de 100.
+
+O reforço emocional não mede a emoção dentro do assunto narrado. Ele mede reação do usuário ao desempenho da IA:
+
+```text
+"Você lembrou certinho."                         -> reforça
+"Já falei isso, não peça de novo."               -> reforça
+"Esse cliente me deixou frustrado porque atrasou." -> conteúdo, não reforço
+```
+
+Feedback positivo e negativo têm o mesmo peso. A diferença está no que o sono deve consolidar: elogio normalmente reforça o caminho usado; correção ou cobrança reforça a lição que evita repetir o erro.
+
+O `emotion_floor` usa uma tabela de impacto decrescente:
+
+```text
+40, +20, +10, +5, +3, +2
+emotion_bonus_max = 80
+```
+
+Assim, o primeiro feedback pesa muito, os seguintes ainda contam, mas saturam. Isso evita que usuários muito passionais deixem todas as memórias permanentemente no topo.
+
+Regra de reativação:
+
+- Consulta, busca e leitura exploratória não pontuam.
+- `read_memory()`/`get_memory()` apenas abre a memória; não altera `score`, `access_count` nem timestamps.
+- Memória usada na resposta passa por `use_memories()`, que grava evento em `_reactivation/`.
+- O sono processa rascunhos, aplica decaimento e só então reativa eventos de uso real.
+- Reativação consolidada aplica `score = 100`, incrementa `access_count` e atualiza `last_accessed`/`last_scored`.
+- Merge de rascunho em memória existente também volta a memória final para `score = 100`.
+- Feedback/correção emocional usa a tabela decrescente acima para atualizar `emotion_floor`.
 
 ---
 
@@ -89,7 +131,8 @@ remember(
 ### Leitura
 - `list_major_tags()` → árvore enxuta dos temas.
 - `list_tags(major_tag, min_score=0)` → tags + sinopses + scores, ordenado por score DESC.
-- `read_memory(tag_id)` → conteúdo completo + asset_ref + go_deeper.
+- `read_memory(tag_id)` → conteúdo completo + asset_ref + go_deeper, sem pontuar.
+- `use_memories(memory_ids, reason="")` → conteúdo final para resposta + evento de reativação para o próximo sono.
 - `search(query)` → conveniência que combina os 3 num caminho otimizado.
 
 ### Operação
@@ -104,6 +147,8 @@ remember(
 memory/
 ├── _draft/                          ← fila aguardando o próximo sono
 │   └── 2026-05-13-turn-abc.json
+├── _reactivation/                   ← memórias usadas em contexto final de resposta
+│   └── 2026-05-13-reactivation-abc.json
 ├── _index.sqlite                    ← scores, FTS, metadados
 ├── _config.toml                     ← provider, schedule, vault config
 ├── pessoas/
@@ -125,7 +170,7 @@ score: 87
 created: 2026-05-13T14:32:00Z
 last_accessed: 2026-05-13T20:11:00Z
 access_count: 12
-emotion_floor: 20
+emotion_floor: 60
 source_type: user_message
 asset_ref: null
 go_deeper: [luizao-socio, sincron-auto, mateus-massari-familia]
@@ -149,19 +194,22 @@ Casado com Cacau, pai do Pedro.
 Quando o cron dispara (default 03:00) ou `sleep_now()` é chamado:
 
 1. **Lê o rascunho** acumulado desde o último sono.
-2. **Heurística barata** primeiro: regex de palavras-chave emocionais, marca candidatos.
+2. **Heurística barata** primeiro: tags, FTS e sinais de feedback/correção ajudam a marcar candidatos.
 3. **LLM-as-judge** então processa cada item do rascunho:
    - Escolhe Major Tag(s) certa(s).
    - Decide se cria memória nova ou atualiza existente (compara com sinopses dos candidatos).
    - Escreve/refina a sinopse (~300-400 chars).
    - Sugere Go Deeper olhando sinopses de memórias com proximidade temática.
-   - Atribui peso emocional (se a heurística marcou).
+   - Marca `emotional=true` somente quando há feedback/correção/cobrança sobre a IA ou sobre uso de memória.
 4. **Recalcula scores**:
    - Decaimento temporal aplicado a todas as memórias.
-   - Bônus de acesso (memórias lidas desde último sono sobem).
-   - Bônus emocional (positivo OU negativo — ambos os polos pesam).
-5. **Limpa rascunho processado**.
-6. **Atualiza `_index.sqlite`** (FTS, scores, timestamps).
+   - Merge de rascunho em memória existente volta a memória final para `100`.
+   - Piso emocional com tabela decrescente para feedback positivo OU negativo sobre a IA.
+5. **Processa `_reactivation/`**:
+   - Memórias usadas em contexto final de resposta voltam para `score = 100`.
+   - `access_count`, `last_accessed` e `last_scored` são atualizados.
+6. **Limpa filas processadas**.
+7. **Atualiza `_index.sqlite`** (FTS, scores, timestamps).
 
 ---
 
@@ -169,7 +217,7 @@ Quando o cron dispara (default 03:00) ou `sleep_now()` é chamado:
 
 - **Nome do pacote** (atual diretório: `sincron-brain-model`).
 - **Linguagem do MCP server**: Python (FastMCP) vs TypeScript (`@modelcontextprotocol/sdk`). Python é o caminho de menos atrito pra LLM/litellm.
-- **Fórmulas exatas** de: taxa de decaimento, valor do bônus por acesso, valor do bônus emocional. Começar com defaults conservadores e ajustar empiricamente.
+- **Calibração empírica**: observar a tabela emocional, taxa de decaimento e frequência de reativação em vaults reais antes de travar defaults definitivos.
 
 ---
 
@@ -187,8 +235,8 @@ Resumo operacional (o que mapeia pro nosso design):
   2. *Repressão* — inibição ativa (voluntária/inconsciente), reversível. → embasa a **supressão a pedido do usuário** (soft delete, recuperável no banco).
   3. *Memória de curta duração* — efêmera por design fisiológico.
   4. *Esquecimento real* — atrofia sináptica por desuso, irreversível. → justifica decaimento por falta de uso.
-- **Emoção forma sinapses duráveis** (via PKA), positiva OU negativa, e a memória persiste meses/anos. → embasa o **piso emocional não-decaente** (+10 por gatilho, cap em `emotion_bonus_max`).
-- **Uso/recuperação mantém a memória** ("a função faz o órgão"; leitura é o melhor exercício geral). → embasa o **bônus de acesso** e a reconciliação que reforça memórias retocadas em vez de duplicá-las.
+- **Emoção forma sinapses duráveis** (via PKA), positiva OU negativa, e a memória persiste meses/anos. → embasa o **piso emocional não-decaente** com tabela decrescente (`+40, +20, +10, +5, +3, +2`, cap em `emotion_bonus_max = 80`) quando a emoção é feedback/correção sobre a IA.
+- **Uso/recuperação mantém a memória** ("a função faz o órgão"; leitura é o melhor exercício geral). → embasa a reativação por uso; o caminho aprovado é registrar eventos durante a conversa e consolidar no sono, em vez de pontuar toda leitura exploratória.
 - **Janela de consolidação**: síntese protéica em 3-6h + segunda onda às 12h (BDNF) decide se a memória passa de 48h. → conhecido, mas **decidimos não implementar duas ondas** (complexidade > ganho).
 
 ---

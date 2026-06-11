@@ -79,7 +79,7 @@ def test_reconcile_merge_enriches_without_duplicating(tmp_path):
         assert count(conn) == 1  # no duplicate created
         assert "Cofundador." in mem.content and "Cacau" in mem.content  # appended, not replaced
         assert set(mem.go_deeper) == {"luizao", "cacau"}  # unioned
-        assert mem.score == 48  # 40 + access_bonus(8)
+        assert mem.score == config.score.initial
 
 
 def test_reconcile_merge_applies_emotion_trigger(tmp_path):
@@ -93,7 +93,7 @@ def test_reconcile_merge_applies_emotion_trigger(tmp_path):
             return Decision(action="merge", target_id="a", content="grato", emotional=True)
 
         _, mem = reconcile.reconcile_draft(conn, draft, config, decide)
-        assert mem.emotion_floor == 10  # one emotional trigger
+        assert mem.emotion_floor == 40  # first emotional feedback trigger
 
 
 def test_reconcile_bloat_guard_falls_back_to_create(tmp_path):

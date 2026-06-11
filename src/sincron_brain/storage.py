@@ -18,7 +18,7 @@ from pathlib import Path
 import frontmatter
 
 from sincron_brain.config import VaultConfig
-from sincron_brain.models import DraftItem, Memory
+from sincron_brain.models import DraftItem, Memory, ReactivationEvent
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS memories (
@@ -65,6 +65,7 @@ def ensure_vault(config: VaultConfig) -> None:
     """Create the vault directory tree if missing."""
     config.vault_path.mkdir(parents=True, exist_ok=True)
     config.draft_dir.mkdir(exist_ok=True)
+    config.reactivation_dir.mkdir(exist_ok=True)
 
 
 def open_db(config: VaultConfig) -> sqlite3.Connection:
@@ -159,22 +160,29 @@ def read_memory_file(path: Path) -> Memory:
 
 
 def get_memory(config: VaultConfig, conn: sqlite3.Connection, memory_id: str) -> Memory | None:
-    """Read a memory by id and bump its access counters."""
+    """Read a memory by id without changing its score or access counters."""
     row = conn.execute(
         "SELECT file_path FROM memories WHERE id = ?", (memory_id,)
     ).fetchone()
     if row is None:
         return None
     path = config.vault_path / row["file_path"]
-    memory = read_memory_file(path)
+    return read_memory_file(path)
 
+
+def reactivate_memory(
+    config: VaultConfig, conn: sqlite3.Connection, memory_id: str
+) -> Memory | None:
+    """Mark a memory as used in an answer: score=initial, access_count++, timestamps=now."""
+    memory = get_memory(config, conn, memory_id)
+    if memory is None:
+        return None
+    now = datetime.now(UTC)
     memory.access_count += 1
-    memory.last_accessed = datetime.now(UTC)
-    conn.execute(
-        "UPDATE memories SET access_count = ?, last_accessed = ? WHERE id = ?",
-        (memory.access_count, memory.last_accessed.isoformat(), memory.id),
-    )
-    conn.commit()
+    memory.last_accessed = now
+    memory.last_scored = now
+    memory.score = config.score.initial
+    write_memory(config, memory, conn)
     return memory
 
 
@@ -203,7 +211,7 @@ def list_major_tags(conn: sqlite3.Connection) -> list[dict]:
 def list_tags(
     conn: sqlite3.Connection, major_tag: str, min_score: int = 0, limit: int = 50
 ) -> list[dict]:
-    """List memories under a major_tag, ordered by score DESC. Returns sinopses, not full content."""
+    """List memories under a major_tag, ordered by score DESC."""
     rows = conn.execute(
         """
         SELECT id, major_tags, score, synopsis, last_accessed, access_count
@@ -280,6 +288,20 @@ def iter_drafts(config: VaultConfig) -> Iterable[tuple[Path, DraftItem]]:
     """Yield all pending drafts in timestamp order."""
     for path in sorted(config.draft_dir.glob("*.json")):
         yield path, DraftItem.model_validate_json(path.read_text(encoding="utf-8"))
+
+
+def write_reactivation(config: VaultConfig, event: ReactivationEvent) -> Path:
+    """Append a reactivation event. Processed at next sleep."""
+    config.reactivation_dir.mkdir(exist_ok=True)
+    path = config.reactivation_dir / f"{event.timestamp.strftime('%Y%m%d-%H%M%S')}-{event.id}.json"
+    path.write_text(event.model_dump_json(indent=2), encoding="utf-8")
+    return path
+
+
+def iter_reactivations(config: VaultConfig) -> Iterable[tuple[Path, ReactivationEvent]]:
+    """Yield all pending reactivation events in timestamp order."""
+    for path in sorted(config.reactivation_dir.glob("*.json")):
+        yield path, ReactivationEvent.model_validate_json(path.read_text(encoding="utf-8"))
 
 
 def stats(conn: sqlite3.Connection) -> dict:

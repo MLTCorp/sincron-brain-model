@@ -11,7 +11,7 @@ from platformdirs import user_data_dir
 
 from sincron_brain import storage
 from sincron_brain.config import VaultConfig, load_config
-from sincron_brain.models import DraftItem
+from sincron_brain.models import DraftItem, ReactivationEvent
 
 VAULT_ENV = "SINCRON_BRAIN_VAULT"
 
@@ -33,7 +33,9 @@ mcp = FastMCP(
     instructions=(
         "Long-term memory layer organized by Major Tag → Tag → synopsis → content. "
         "Use list_major_tags() to see themes, list_tags(major_tag) to see topics with "
-        "their synopses, then read_memory(id) only when you need the full content. "
+        "their synopses, then read_memory(id) to inspect candidate full content. "
+        "When specific memories will be used in the final answer, call use_memories(ids) "
+        "to fetch that answer context and queue reactivation for the next sleep. "
         "Use remember() to save new information for long-term recall. "
         "The actual indexing happens during the sleep job (nightly cron), not on remember()."
     ),
@@ -117,7 +119,7 @@ def list_tags(major_tag: str, min_score: int = 0, limit: int = 50) -> list[dict]
 
 @mcp.tool()
 def read_memory(memory_id: str) -> dict | None:
-    """Open the full content of a specific memory. Increments access counter.
+    """Open the full content of a specific memory for inspection only.
 
     Args:
         memory_id: The id returned by list_tags() or search().
@@ -125,6 +127,10 @@ def read_memory(memory_id: str) -> dict | None:
     Returns:
         Full memory dict with content, synopsis, tags, go_deeper, asset_ref.
         Returns None if not found.
+
+    Note:
+        This does not change score or access_count. Use use_memories() when a
+        memory is actually included in the answer context.
     """
     config = get_config()
     with storage.open_db(config) as conn:
@@ -142,6 +148,59 @@ def read_memory(memory_id: str) -> dict | None:
             "score": memory.score,
             "access_count": memory.access_count,
         }
+
+
+@mcp.tool()
+def use_memories(memory_ids: list[str], reason: str = "") -> dict:
+    """Fetch memories for final answer context and queue sleep-time reactivation.
+
+    Use this after exploratory search/read steps, once you know which memories
+    will actually inform the answer. The score is not changed immediately; the
+    next sleep consolidates drafts first, then sets used final memories to 100.
+
+    Args:
+        memory_ids: IDs selected for the answer context.
+        reason: Optional short note about how these memories are being used.
+
+    Returns:
+        {"memories": list[dict], "queued_reactivation": bool, "event_id": str | None}
+    """
+    config = get_config()
+    memories = []
+    found_ids = []
+    with storage.open_db(config) as conn:
+        for memory_id in dict.fromkeys(memory_ids):
+            memory = storage.get_memory(config, conn, memory_id)
+            if memory is None:
+                continue
+            found_ids.append(memory.id)
+            memories.append(
+                {
+                    "id": memory.id,
+                    "major_tags": memory.major_tags,
+                    "synopsis": memory.synopsis,
+                    "content": memory.content,
+                    "go_deeper": memory.go_deeper,
+                    "asset_ref": memory.asset_ref,
+                    "source_type": memory.source_type,
+                    "score": memory.score,
+                    "access_count": memory.access_count,
+                }
+            )
+    if not found_ids:
+        return {"memories": [], "queued_reactivation": False, "event_id": None}
+
+    event = ReactivationEvent(
+        id=storage.new_memory_id("reactivation"),
+        memory_ids=found_ids,
+        reason=reason,
+    )
+    storage.write_reactivation(config, event)
+    return {
+        "memories": memories,
+        "queued_reactivation": True,
+        "event_id": event.id,
+    }
 
 
 @mcp.tool()
@@ -169,11 +228,12 @@ def sleep_now() -> dict:
     """Force the sleep/indexing job to run immediately instead of waiting for cron.
 
     Processes all queued drafts: classifies, writes synopses, picks Major Tags,
-    suggests Go Deeper links, applies score decay/bonuses. Costs LLM tokens
-    via the configured judge provider.
+    suggests Go Deeper links, applies score decay, then reactivates memories
+    selected via use_memories(). Costs LLM tokens via the configured judge provider.
 
     Returns:
-        {"processed": int, "created": int, "merged": int, "duration_seconds": float}
+        {"processed": int, "created": int, "merged": int,
+         "reactivated": int, "duration_seconds": float}
     """
     from sincron_brain import judge
     from sincron_brain.sleep import run_sleep
@@ -193,6 +253,7 @@ def stats() -> dict:
     with storage.open_db(config) as conn:
         base = storage.stats(conn)
     base["draft_queue"] = len(list(config.draft_dir.glob("*.json")))
+    base["reactivation_queue"] = len(list(config.reactivation_dir.glob("*.json")))
     base["vault_path"] = str(config.vault_path)
     return base
 

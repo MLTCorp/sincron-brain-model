@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 from sincron_brain import sleep, storage
 from sincron_brain.config import VaultConfig
-from sincron_brain.models import DraftItem, Memory
+from sincron_brain.models import DraftItem, Memory, ReactivationEvent
 from sincron_brain.reconcile import Decision
 
 
@@ -77,3 +77,36 @@ def test_run_sleep_merges_with_injected_decider(tmp_path):
         assert conn.execute("SELECT COUNT(*) AS c FROM memories").fetchone()["c"] == 1  # no dup
         body = conn.execute("SELECT content FROM memories_fts WHERE id = ?", ("a",)).fetchone()
     assert "Cofundador." in body["content"] and "Pedro" in body["content"]
+
+
+def test_run_sleep_reactivates_used_memories_after_decay(tmp_path):
+    config = make_config(tmp_path)
+    old = datetime.now(UTC) - timedelta(days=10)
+    with storage.open_db(config) as conn:
+        storage.write_memory(
+            config,
+            Memory(
+                id="a",
+                major_tags=["pessoas"],
+                score=30,
+                last_accessed=old,
+                last_scored=old,
+                synopsis="Mateus",
+            ),
+            conn,
+        )
+    event_path = storage.write_reactivation(
+        config,
+        ReactivationEvent(id="r1", memory_ids=["a"], reason="used in answer"),
+    )
+
+    result = sleep.run_sleep(config)
+
+    assert result["reactivated"] == 1
+    assert not event_path.exists()
+    with storage.open_db(config) as conn:
+        row = conn.execute(
+            "SELECT score, access_count FROM memories WHERE id = ?", ("a",)
+        ).fetchone()
+    assert row["score"] == config.score.initial
+    assert row["access_count"] == 1

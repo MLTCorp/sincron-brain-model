@@ -62,6 +62,14 @@ def test_build_messages_includes_draft_and_candidates():
     assert "a" in blob and "synopsis a" in blob
 
 
+def test_build_messages_defines_emotion_as_ai_feedback_not_narrated_feeling():
+    msgs = build_messages(DraftItem(id="d", content="..."), _cands())
+    blob = " ".join(m["content"] for m in msgs)
+    assert "Feedback positivo" in blob
+    assert "Esse cliente me deixou frustrado" in blob
+    assert "não reforço emocional do sistema" in blob
+
+
 def test_judge_returns_merge_from_injected_llm():
     cfg = VaultConfig(vault_path=Path("/vault"))
     raw = '{"action":"merge","target_id":"a","content_append":"novo","go_deeper":["p"]}'

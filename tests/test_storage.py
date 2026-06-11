@@ -1,8 +1,10 @@
 """Storage round-trips: .md file <-> Memory model <-> SQLite index."""
 
+from datetime import UTC, datetime, timedelta
+
 from sincron_brain import storage
 from sincron_brain.config import VaultConfig
-from sincron_brain.models import Memory
+from sincron_brain.models import Memory, ReactivationEvent
 
 
 def make_config(tmp_path) -> VaultConfig:
@@ -51,3 +53,80 @@ def test_index_stores_emotion_floor(tmp_path):
             "SELECT emotion_floor FROM memories WHERE id = ?", (memory.id,)
         ).fetchone()
     assert row["emotion_floor"] == 10
+
+
+def test_get_memory_is_read_only(tmp_path):
+    config = make_config(tmp_path)
+    older = datetime.now(UTC) - timedelta(days=3)
+    memory = Memory(
+        id="m-read",
+        major_tags=["trabalho"],
+        score=40,
+        access_count=0,
+        last_accessed=older,
+        last_scored=older,
+        synopsis="s",
+        content="corpo",
+    )
+    with storage.open_db(config) as conn:
+        path = storage.write_memory(config, memory, conn)
+
+        first = storage.get_memory(config, conn, "m-read")
+        second = storage.get_memory(config, conn, "m-read")
+
+    assert first is not None and second is not None
+    assert second.access_count == 0
+    assert second.score == 40
+    assert second.last_accessed == older
+    assert second.last_scored == older
+
+    on_disk = storage.read_memory_file(path)
+    assert on_disk.access_count == 0
+    assert on_disk.score == 40
+
+
+def test_reactivate_memory_sets_score_to_initial_and_syncs_md(tmp_path):
+    config = make_config(tmp_path)
+    older = datetime.now(UTC) - timedelta(days=3)
+    memory = Memory(
+        id="m-used",
+        major_tags=["trabalho"],
+        score=12,
+        access_count=0,
+        last_accessed=older,
+        last_scored=older,
+        synopsis="s",
+    )
+    with storage.open_db(config) as conn:
+        path = storage.write_memory(config, memory, conn)
+        reactivated = storage.reactivate_memory(config, conn, "m-used")
+
+    assert reactivated is not None
+    assert reactivated.score == config.score.initial
+    assert reactivated.access_count == 1
+    assert reactivated.last_accessed > older
+    assert reactivated.last_scored > older
+
+    on_disk = storage.read_memory_file(path)
+    assert on_disk.score == config.score.initial
+    assert on_disk.access_count == 1
+
+
+def test_reactivation_queue_roundtrip(tmp_path):
+    config = make_config(tmp_path)
+    event = ReactivationEvent(
+        id="r1",
+        memory_ids=["a", "b"],
+        reason="answer context",
+    )
+    storage.write_reactivation(config, event)
+    queued = list(storage.iter_reactivations(config))
+    assert len(queued) == 1
+    assert queued[0][1].memory_ids == ["a", "b"]
+    assert queued[0][1].reason == "answer context"
+
+
+def test_get_memory_returns_none_for_missing(tmp_path):
+    config = make_config(tmp_path)
+    with storage.open_db(config) as conn:
+        assert storage.get_memory(config, conn, "nope") is None

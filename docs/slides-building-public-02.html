@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=1920, initial-scale=1" />
-  <title>Devlog 01 · sincron-brain-model</title>
+  <title>Devlog 02 · sincron-brain-model</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
@@ -664,6 +664,131 @@
       font: 400 clamp(14px, 1vw, 17px)/1.4 var(--font-sans);
       color: var(--text-soft);
     }
+
+    /* ---- Template: compare (antes/depois) ---- */
+    .slide.compare { flex-direction: column; align-items: center; justify-content: center; gap: 48px; }
+    .compare-head { text-align: center; display: flex; flex-direction: column; gap: 14px; }
+    .compare-title { font: 400 clamp(40px, 4vw, 72px)/1.1 var(--font-serif); color: var(--text); margin: 0; }
+    .compare-grid { display: grid; grid-template-columns: 1fr auto 1fr; gap: 40px; align-items: stretch; width: 100%; max-width: 1700px; }
+    .compare-side { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 38px 40px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 22px; }
+    .compare-after { border: 1px solid rgba(237,94,10,0.22); box-shadow: 0 0 0 1px rgba(237,94,10,0.15), var(--shadow); }
+    html[data-theme="dark"] .compare-after { background: linear-gradient(180deg, rgba(237,94,10,0.07), var(--surface)); }
+    .side-label { font: 700 13px/1 var(--font-sans); letter-spacing: 0.16em; text-transform: uppercase; color: var(--text-muted); }
+    .side-label.after { color: var(--ember-500); }
+    .compare-side ul { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 15px; }
+    .compare-side li { font: 400 clamp(18px, 1.35vw, 25px)/1.4 var(--font-sans); color: var(--text); padding-left: 24px; position: relative; }
+    .compare-side li::before { content: "—"; position: absolute; left: 0; color: var(--text-muted); }
+    .compare-after li::before { color: var(--ember-500); }
+    .compare-divider { display: flex; align-items: center; justify-content: center; }
+    .compare-divider svg { width: 32px; height: 100px; }
+
+    /* ---- Template: code (terminal) ---- */
+    .slide.code { align-items: center; justify-content: center; }
+    .code-inner { display: grid; grid-template-columns: 0.9fr 1.3fr; gap: 64px; align-items: center; width: 100%; max-width: 1700px; }
+    .code-text { display: flex; flex-direction: column; gap: 18px; }
+    .code-title { font: 400 clamp(44px, 4.4vw, 80px)/1.02 var(--font-serif); color: var(--text); margin: 0; }
+    .code-lead { font: 400 clamp(19px, 1.45vw, 25px)/1.45 var(--font-sans); color: var(--text-soft); margin: 0; max-width: 34ch; }
+    .window.terminal { background: #0a0b0e; border: 1px solid #1f2227; }
+    .window.terminal .window-bar { background: #14171b; border-bottom-color: #1f2227; }
+    .window.terminal .window-title { color: #8a8f99; }
+    .terminal-body { padding: 26px 30px; font: 500 clamp(14px, 1vw, 19px)/1.7 var(--font-mono); color: #dce0e6; background: #0a0b0e; overflow: hidden; white-space: pre-wrap; }
+    .t-line { color: #dce0e6; }
+    .t-prompt { color: var(--ember-400); margin-right: 8px; }
+    .t-out { color: #8a8f99; }
+    .t-ok { color: var(--sys-green); }
+    .t-ember { color: var(--ember-300); font-weight: 600; }
+    .cursor-blink { display: inline-block; width: 9px; height: 1.05em; background: var(--ember-400); margin-left: 2px; vertical-align: text-bottom; animation: cursorBlink 1.1s steps(1) infinite; }
+    @keyframes cursorBlink { 0%, 50% { opacity: 1; } 50.01%, 100% { opacity: 0; } }
+
+    /* ---- Template: kpi (números) ---- */
+    .slide.kpi { flex-direction: column; align-items: center; justify-content: center; gap: 50px; }
+    .kpi-head { text-align: center; display: flex; flex-direction: column; gap: 14px; }
+    .kpi-title { font: 400 clamp(40px, 4vw, 72px)/1.1 var(--font-serif); color: var(--text); margin: 0; }
+    .kpi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px; width: 100%; max-width: 1700px; }
+    .kpi-block { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 50px 36px; display: flex; flex-direction: column; gap: 16px; text-align: center; align-items: center; box-shadow: var(--shadow); }
+    .kpi-block .counter-value { font: 400 clamp(80px, 8vw, 140px)/0.9 var(--font-serif); color: var(--ember-500); font-feature-settings: "tnum" 1; }
+    .kpi-label-big { font: 400 clamp(17px, 1.25vw, 23px)/1.35 var(--font-sans); color: var(--text-soft); max-width: 22ch; }
+
+    /* ---- KPI block clicavel ---- */
+    .kpi-block.clickable { cursor: pointer; transition: transform 240ms var(--ease), box-shadow 240ms var(--ease); }
+    .kpi-block.clickable:hover { transform: translateY(-6px); box-shadow: 0 0 0 1px rgba(237,94,10,0.4), var(--shadow-strong); }
+    .kpi-block.clickable:hover .counter-value { color: var(--ember-400); }
+    .kpi-block.clickable:focus-visible { outline: 2px solid var(--ember-400); outline-offset: 4px; }
+    .kpi-hint {
+      display: inline-flex; align-items: center; gap: 8px;
+      font: 500 12px/1 var(--font-mono);
+      letter-spacing: 0.12em; text-transform: uppercase;
+      color: var(--ember-500);
+      margin-top: 4px;
+    }
+    .kpi-hint::before {
+      content: ""; width: 6px; height: 6px; border-radius: 50%;
+      background: var(--ember-400);
+      animation: kpiHintPulse 1.8s ease-in-out infinite;
+    }
+    @keyframes kpiHintPulse { 0%,100% { opacity: 0.45; transform: scale(1); } 50% { opacity: 1; transform: scale(1.4); } }
+
+    /* ---- Modal ---- */
+    .modal-overlay {
+      position: fixed; inset: 0; z-index: 100;
+      background: rgba(8,9,12,0.78);
+      backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+      display: none; align-items: center; justify-content: center;
+      opacity: 0; transition: opacity 280ms var(--ease);
+      cursor: default;
+    }
+    html[data-theme="light"] .modal-overlay { background: rgba(20,22,28,0.55); }
+    .modal-overlay.open { display: flex; opacity: 1; }
+    .modal-panel {
+      background: var(--surface); color: var(--text);
+      border: 1px solid var(--border); border-radius: var(--r-lg);
+      box-shadow: var(--shadow-strong);
+      width: min(94vw, 1180px); max-height: 86vh;
+      display: flex; flex-direction: column; overflow: hidden;
+      transform: translateY(24px) scale(0.96);
+      transition: transform 340ms var(--ease);
+    }
+    .modal-overlay.open .modal-panel { transform: translateY(0) scale(1); }
+    .modal-head {
+      display: flex; align-items: flex-start; justify-content: space-between;
+      gap: 16px; padding: 30px 36px 18px;
+      border-bottom: 1px solid var(--border);
+    }
+    .modal-title { font: 400 clamp(28px, 2.4vw, 40px)/1.1 var(--font-serif); color: var(--text); margin: 0; }
+    .modal-subtitle {
+      font: 500 12px/1.4 var(--font-mono);
+      letter-spacing: 0.1em; text-transform: uppercase;
+      color: var(--text-muted); margin-top: 8px;
+    }
+    .modal-close {
+      background: transparent; border: 1px solid var(--border); color: var(--text);
+      width: 38px; height: 38px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; font: 500 22px/1 var(--font-sans);
+      flex-shrink: 0;
+      transition: border-color 200ms var(--ease), color 200ms var(--ease);
+    }
+    .modal-close:hover { border-color: var(--ember-400); color: var(--ember-400); }
+    .modal-body {
+      padding: 22px 36px 32px; overflow-y: auto;
+      display: flex; flex-direction: column; gap: 26px;
+    }
+    .modal-section { display: flex; flex-direction: column; gap: 10px; }
+    .modal-section-head {
+      display: flex; align-items: baseline; justify-content: space-between; gap: 16px;
+      padding-bottom: 6px; border-bottom: 1px dashed var(--border);
+    }
+    .modal-section-title { font: 500 14px/1 var(--font-mono); color: var(--ember-500); letter-spacing: 0.04em; }
+    .modal-section-count { font: 500 11px/1 var(--font-mono); color: var(--text-muted); letter-spacing: 0.1em; text-transform: uppercase; }
+    .modal-test-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
+    .modal-test-list li {
+      display: grid; grid-template-columns: 28px 1fr; gap: 14px;
+      align-items: baseline; padding: 6px 0;
+      font: 400 15px/1.45 var(--font-sans); color: var(--text-soft);
+    }
+    .modal-test-list .t-num { font: 500 12px/1.4 var(--font-mono); color: var(--ember-500); }
+    .modal-test-list strong { color: var(--text); font-weight: 600; }
+    body.modal-open { cursor: default; }
   </style>
 </head>
 <body>
@@ -672,65 +797,98 @@
     <!-- 1. COVER -->
     <section class="slide cover active ambient-breathe" data-transition="scale-fade">
       <div class="cover-inner">
-        <span class="eyebrow">Devlog · 20 maio 2026</span>
+        <span class="eyebrow">Devlog · 29 maio 2026</span>
         <h1 class="cover-title">
-          Devlog <span class="italic-em shimmer">01</span>.<br/>
-          Da ideia ao scaffold rodando.
+          Devlog <span class="italic-em shimmer">02</span>.<br/>
+          O sono ganhou cérebro.
         </h1>
-        <p class="cover-lead">Anotações da primeira sessão de desenho e implementação do sincron-brain-model.</p>
+        <p class="cover-lead">A semana em que o sincron-brain-model aprendeu a decidir o que lembrar, o que fundir e o que deixar esquecer.</p>
         <div class="cover-foot">
           <span class="chip">sincron-brain-model</span>
-          <span class="chip done">v0.1 · scaffold no ar</span>
+          <span class="chip done">v0.2 · judge no ar</span>
         </div>
       </div>
     </section>
 
-    <!-- 2. BULLETS — decisões da sessão -->
-    <section class="slide bullets" data-transition="slide-horizontal">
-      <div class="bullets-inner">
-        <span class="eyebrow">O que decidimos nesta sessão</span>
-        <h2 class="bullets-title">
-          Quatro decisões que <span class="italic-em">cortaram peso</span>.
-        </h2>
-        <ol class="bullets-list">
-          <li><span class="num">01</span><div><strong>Cortamos embeddings vetoriais.</strong><br/><span>O próprio LLM raciocina similaridade melhor que cálculo de distância.</span></div></li>
-          <li><span class="num">02</span><div><strong>Cortamos processamento multimodal interno.</strong><br/><span>O app host textualiza áudio/imagem/web. A gente só organiza o texto.</span></div></li>
-          <li><span class="num">03</span><div><strong>Embedding local também saiu.</strong><br/><span>Foco em VPS pequenas. API externa via litellm, custo irrelevante.</span></div></li>
-          <li><span class="num">04</span><div><strong>Major Tag → Tag é eixo único.</strong><br/><span>Sem rede de RAG por baixo. Sinopse no topo do .md guia a navegação.</span></div></li>
-        </ol>
-      </div>
-    </section>
-
-    <!-- 3. QUOTE — o insight central -->
+    <!-- 2. QUOTE — a tese do Izquierdo -->
     <section class="slide quote ambient-breathe" data-transition="mask-reveal">
       <div class="quote-inner">
         <svg class="quote-mark" viewBox="0 0 60 50" aria-hidden="true">
           <path d="M0 30 Q0 0 25 0 L25 12 Q12 12 12 24 L25 24 L25 50 L0 50 Z M35 30 Q35 0 60 0 L60 12 Q47 12 47 24 L60 24 L60 50 L35 50 Z" fill="var(--ember-400)"/>
         </svg>
         <p class="quote-text">
-          Para o agente, "sócio" e "cofundador"<br/>
-          são parentes <span class="italic-em">por padrão</span>.<br/>
-          Não precisa de embedding pra isso.
+          Para pensar é preciso esquecer detalhes<br/>
+          para poder <span class="italic-em">generalizar</span>.
         </p>
         <div class="quote-attr">
-          <span class="quote-name">Observação que destravou o design</span>
-          <span class="quote-role">Insight da sessão</span>
+          <span class="quote-name">Iván Izquierdo · "A arte de esquecer"</span>
+          <span class="quote-role">A leitura que guiou a semana</span>
         </div>
       </div>
     </section>
 
-    <!-- 4. MOCKUP — anatomia real do .md -->
+    <!-- 3. COMPARE — o que o artigo confirmou e o que acrescentou -->
+    <section class="slide compare" data-transition="wipe-ember">
+      <div class="compare-head">
+        <span class="eyebrow">O efeito do Izquierdo no design</span>
+        <h2 class="compare-title">
+          O que ele <span class="italic-em">confirmou</span>, o que ele acrescentou.
+        </h2>
+      </div>
+      <div class="compare-grid">
+        <div class="compare-side compare-before floating">
+          <span class="side-label">Já estava no design — confirmou</span>
+          <ul>
+            <li>Decaimento por desuso, com piso que nunca zera</li>
+            <li>Não guardar tudo: a sinopse filtra o que importa</li>
+            <li>O acesso reforça — "a função faz o órgão"</li>
+            <li>Sem embedding: o LLM raciocina a similaridade</li>
+          </ul>
+        </div>
+        <div class="compare-divider">
+          <svg viewBox="0 0 24 80" aria-hidden="true">
+            <path d="M4 8 L20 40 L4 72" fill="none" stroke="var(--ember-500)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="compare-side compare-after floating delay-2">
+          <span class="side-label after">Entrou por causa dele — acrescentou</span>
+          <ul>
+            <li>Piso emocional que não decai (sinapse durável)</li>
+            <li>Feedback positivo e negativo sobre a IA pesam igual</li>
+            <li>Suprimir é inibir, não apagar → soft delete</li>
+            <li>No merge, a carga emocional não dilui: fica a maior</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. BULLETS — o que deixamos de fora e por quê -->
+    <section class="slide bullets" data-transition="slide-horizontal">
+      <div class="bullets-inner">
+        <span class="eyebrow">Tão importante quanto o que entra</span>
+        <h2 class="bullets-title">
+          O que <span class="italic-em">deixamos de fora</span> — e por quê.
+        </h2>
+        <ol class="bullets-list">
+          <li><span class="num">01</span><div><strong>Consolidação em duas ondas (3h e 12h).</strong><br/><span>A neurociência tem; nós não. Nosso sono é um cron único — a complexidade não paga o ganho.</span></div></li>
+          <li><span class="num">02</span><div><strong>Memória de trabalho separada.</strong><br/><span>Curtíssimo prazo é a janela de contexto do host. Não é função da camada de memória.</span></div></li>
+          <li><span class="num">03</span><div><strong>"Regiões do cérebro" no vault.</strong><br/><span>Amígdala, hipocampo, córtex... viraria estrutura paralela competindo com o eixo Major Tag → Tag.</span></div></li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- 4. MOCKUP — o campo que mudou no .md -->
     <section class="slide mockup ambient-breathe" data-transition="tilt-reveal">
       <div class="mockup-stage">
         <div class="mockup-text">
-          <span class="eyebrow">Anatomia de uma memória</span>
+          <span class="eyebrow">O que mudou na memória</span>
           <h2 class="mockup-title">
-            Um <span class="italic-em">.md</span> por memória.<br/>SQLite só índice.
+            <span class="italic-em">emotion_weight</span> morreu.<br/>Nasceu o piso emocional.
           </h2>
-          <p class="mockup-lead">Frontmatter com score, contadores, tags e links. Corpo livre em markdown. Vault abre no Obsidian sem ajuste.</p>
+          <p class="mockup-lead">Trocamos o peso float 0–1 por um piso inteiro com impacto decrescente: +40, +20, +10, +5, +3, +2; teto em 80. Emoção narrada é conteúdo; feedback sobre a IA reforça.</p>
           <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:8px;">
             <span class="chip done">implementado</span>
-            <span class="chip">storage.py + models.py</span>
+            <span class="chip">scoring.py · 9 testes</span>
           </div>
         </div>
         <div class="window floating">
@@ -745,134 +903,87 @@
 - pessoas
 - empresas/sincron
 <span class="c-fn">score</span>: <span class="c-num">87</span>
-<span class="c-fn">created</span>: <span class="c-str">'2026-05-13T14:32:00+00:00'</span>
-<span class="c-fn">last_accessed</span>: <span class="c-str">'2026-05-20T09:11:00+00:00'</span>
-<span class="c-fn">last_scored</span>: <span class="c-str">'2026-05-20T03:00:00+00:00'</span>
 <span class="c-fn">access_count</span>: <span class="c-num">12</span>
-<span class="c-fn">emotion_floor</span>: <span class="c-num">40</span>
+<span class="c-fn">emotion_floor</span>: <span class="c-num">60</span>   <span class="c-out"># 2 reforcos · nao decai</span>
 <span class="c-fn">source_type</span>: user_message
-<span class="c-fn">asset_ref</span>: <span class="c-null">null</span>
 <span class="c-fn">go_deeper</span>:
 - luizao-socio-d4e5f6a7
-- sincron-auto-b8c9d0e1
-<span class="c-fn">synopsis</span>: <span class="c-str">'Cofundador da Sincron Digital, sócio do Luizão. Liderança técnica e produto. Casado com Cacau, pai do Pedro.'</span>
+- cacau-esposa-9a8b7c6d
+- pedro-filho-1f2e3d4c
+<span class="c-fn">synopsis</span>: <span class="c-str">'Cofundador da Sincron Digital, socio do Luizao. Casado com Cacau, pai do Pedro.'</span>
 <span class="c-key">---</span>
 
-<span class="c-out"># corpo da memória em markdown livre</span></code></pre>
+<span class="c-out"># corpo agregado pela reconciliacao: anexado, nao reescrito</span></code></pre>
         </div>
       </div>
     </section>
 
-    <!-- 5. FLOW — caminho que o agente faz -->
-    <section class="slide flow" data-transition="slide-horizontal">
-      <div class="flow-head">
-        <span class="eyebrow">Como o agente acessa</span>
-        <h2 class="flow-title">
-          Quatro passos. Cada um <span class="italic-em">mais caro</span> que o anterior.
+    <!-- 5. COMPARE — o bug da duplicação -->
+    <section class="slide compare" data-transition="wipe-ember">
+      <div class="compare-head">
+        <span class="eyebrow">O bug que achamos no sono</span>
+        <h2 class="compare-title">
+          Todo rascunho <span class="italic-em">virava memória nova</span>.
         </h2>
       </div>
-      <div class="flow-canvas">
-        <svg viewBox="0 0 1400 320" xmlns="http://www.w3.org/2000/svg" class="flow-svg">
-          <path class="flow-line" d="M 240 160 Q 340 160 410 160" />
-          <path class="flow-line" d="M 590 160 Q 690 160 760 160" />
-          <path class="flow-line" d="M 940 160 Q 1040 160 1110 160" />
-
-          <g class="flow-node">
-            <rect x="60" y="110" width="180" height="100" rx="18" />
-            <text x="150" y="155" text-anchor="middle" class="flow-node-title">Major Tag</text>
-            <text x="150" y="180" text-anchor="middle" class="flow-node-sub">~10 itens</text>
-          </g>
-          <g class="flow-node">
-            <rect x="410" y="110" width="180" height="100" rx="18" />
-            <text x="500" y="155" text-anchor="middle" class="flow-node-title">Tag</text>
-            <text x="500" y="180" text-anchor="middle" class="flow-node-sub">filtra por score</text>
-          </g>
-          <g class="flow-node">
-            <rect x="760" y="110" width="180" height="100" rx="18" />
-            <text x="850" y="155" text-anchor="middle" class="flow-node-title">Sinopse</text>
-            <text x="850" y="180" text-anchor="middle" class="flow-node-sub">~400 chars</text>
-          </g>
-          <g class="flow-node flow-node-final">
-            <rect x="1110" y="110" width="220" height="100" rx="18" />
-            <text x="1220" y="155" text-anchor="middle" class="flow-node-title">read_memory</text>
-            <text x="1220" y="180" text-anchor="middle" class="flow-node-sub">arquivo completo</text>
-          </g>
-        </svg>
-      </div>
-      <div class="flow-foot">
-        <span class="chip">Cada passo só se justificar</span>
-        <span class="chip ember">Token mínimo no caminho</span>
+      <div class="compare-grid">
+        <div class="compare-side compare-before floating">
+          <span class="side-label">Antes</span>
+          <ul>
+            <li>id com sufixo aleatório a cada draft</li>
+            <li>"falei do Matheus de novo" = card duplicado</li>
+            <li>o vault inchava com repetição</li>
+            <li>sinopse e go_deeper se perdiam entre cópias</li>
+          </ul>
+        </div>
+        <div class="compare-divider">
+          <svg viewBox="0 0 24 80" aria-hidden="true">
+            <path d="M4 8 L20 40 L4 72" fill="none" stroke="var(--ember-500)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="compare-side compare-after floating delay-2">
+          <span class="side-label after">Depois</span>
+          <ul>
+            <li>a reconciliação acha o card que já existe</li>
+            <li>funde: anexa o conteúdo, não recria</li>
+            <li>go_deeper e carga emocional se somam</li>
+            <li>guarda anti-bloat evita o bloco gigante</li>
+          </ul>
+        </div>
       </div>
     </section>
 
-    <!-- 6. BULLETS — o que já tá rodando -->
-    <section class="slide bullets" data-transition="slide-horizontal">
-      <div class="bullets-inner">
-        <span class="eyebrow">Estado atual · v0.1</span>
-        <h2 class="bullets-title">
-          O que <span class="italic-em">já está rodando</span>.
-        </h2>
-        <ol class="bullets-list">
-          <li><span class="check">✓</span><div><strong>Pacote Python estruturado.</strong><br/><span>pyproject.toml, src layout, comando <code>sincron-brain</code> registrado como entry point.</span></div></li>
-          <li><span class="check">✓</span><div><strong>Vault funcional.</strong><br/><span>.md no disco + SQLite com FTS5. CLI <code>init</code> cria, <code>stats</code> diagnostica.</span></div></li>
-          <li><span class="check">✓</span><div><strong>MCP server com 8 tools.</strong><br/><span>remember, list_major_tags, list_tags, read_memory, use_memories, search, sleep_now, stats.</span></div></li>
-          <li><span class="check">✓</span><div><strong>10 providers configuráveis.</strong><br/><span>Anthropic, OpenAI, Gemini, Voyage, Cohere, Mistral, Azure, Bedrock, Ollama, custom.</span></div></li>
-        </ol>
-      </div>
-    </section>
-
-    <!-- 7. MOCKUP — as tools do MCP -->
-    <section class="slide mockup" data-transition="mask-reveal">
-      <div class="mockup-stage" style="grid-template-columns: 1fr; max-width: 1500px; gap: 40px;">
-        <div class="mockup-text" style="text-align:center; align-items:center;">
-          <span class="eyebrow">A interface que o agente recebe</span>
-          <h2 class="mockup-title">
-            Oito tools. <span class="italic-em">Curtas.</span>
+    <!-- 6. CODE — prova: o sono fundindo no terminal -->
+    <section class="slide code" data-transition="mask-reveal">
+      <div class="code-inner">
+        <div class="code-text">
+          <span class="eyebrow">A prova no terminal</span>
+          <h2 class="code-title">
+            Segundo sono: <span class="italic-em">funde, não duplica</span>.
           </h2>
+          <p class="code-lead">O judge reconhece que o Matheus já existe e devolve um merge. Zero memórias novas, uma enriquecida.</p>
         </div>
-        <div class="tool-list">
-          <div class="tool-row">
-            <span class="tool-name">remember()</span>
-            <span class="tool-desc">enfileira texto pro próximo sono</span>
+        <div class="window terminal floating">
+          <div class="window-bar">
+            <span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span>
+            <span class="window-title">matheus@sincron · sincron-brain sleep-now</span>
           </div>
-          <div class="tool-row">
-            <span class="tool-name">list_major_tags()</span>
-            <span class="tool-desc">árvore de temas com score</span>
-          </div>
-          <div class="tool-row">
-            <span class="tool-name">list_tags()</span>
-            <span class="tool-desc">tópicos + sinopses sob um tema</span>
-          </div>
-          <div class="tool-row">
-            <span class="tool-name">read_memory()</span>
-            <span class="tool-desc">abre o .md completo sem pontuar</span>
-          </div>
-          <div class="tool-row">
-            <span class="tool-name">use_memories()</span>
-            <span class="tool-desc">contexto final + reativacao no sono</span>
-          </div>
-          <div class="tool-row">
-            <span class="tool-name">search()</span>
-            <span class="tool-desc">FTS de fallback quando tag não basta</span>
-          </div>
-          <div class="tool-row">
-            <span class="tool-name">sleep_now()</span>
-            <span class="tool-desc">força o sono na hora</span>
-          </div>
-          <div class="tool-row" style="grid-column: 1 / -1; max-width: 600px; margin: 0 auto;">
-            <span class="tool-name">stats()</span>
-            <span class="tool-desc">contagem, score médio, fila de rascunho</span>
-          </div>
+          <pre class="terminal-body"><code><span class="t-prompt">$</span> sincron-brain sleep-now
+<span class="t-out">Running sleep job...</span>
+<span class="t-ok">  judge -> merge · target=cofundador-da-sincron</span>
+<span class="t-out">  + conteudo anexado · go_deeper +1 · emotion_floor 40</span>
+Done. processed=1 <span class="t-ember">created=0 merged=1</span>
+<span class="t-prompt">$</span> <span class="cursor-blink"></span></code></pre>
         </div>
       </div>
     </section>
 
-    <!-- 8. FLOW — estado do sono -->
+    <!-- 7. FLOW — o sono agora completo -->
     <section class="slide flow" data-transition="tilt-reveal">
       <div class="flow-head">
-        <span class="eyebrow">Sono noturno · estado atual</span>
+        <span class="eyebrow">Sono noturno · antes era placeholder</span>
         <h2 class="flow-title">
-          A casca <span class="italic-em">funciona</span>. O miolo agora consolida uso real.
+          O caminho do rascunho até o <span class="italic-em">.md</span>.
         </h2>
       </div>
       <div class="flow-canvas">
@@ -884,29 +995,51 @@
           <g class="flow-node flow-node-done">
             <rect x="60" y="110" width="180" height="100" rx="18" />
             <text x="150" y="148" text-anchor="middle" class="flow-node-title">Rascunho</text>
-            <text x="150" y="175" text-anchor="middle" class="flow-node-sub">implementado</text>
+            <text x="150" y="175" text-anchor="middle" class="flow-node-sub">do remember()</text>
           </g>
-          <g class="flow-node flow-node-todo">
+          <g class="flow-node flow-node-done">
             <rect x="410" y="110" width="180" height="100" rx="18" />
-            <text x="500" y="148" text-anchor="middle" class="flow-node-title">Heurística</text>
-            <text x="500" y="175" text-anchor="middle" class="flow-node-sub">a fazer</text>
+            <text x="500" y="148" text-anchor="middle" class="flow-node-title">Candidatos</text>
+            <text x="500" y="175" text-anchor="middle" class="flow-node-sub">Tag + FTS</text>
           </g>
-          <g class="flow-node flow-node-todo">
+          <g class="flow-node flow-node-done">
             <rect x="760" y="110" width="180" height="100" rx="18" />
             <text x="850" y="148" text-anchor="middle" class="flow-node-title">Judge LLM</text>
-            <text x="850" y="175" text-anchor="middle" class="flow-node-sub">a fazer</text>
+            <text x="850" y="175" text-anchor="middle" class="flow-node-sub">decide e escreve</text>
           </g>
           <g class="flow-node flow-node-done">
             <rect x="1110" y="110" width="220" height="100" rx="18" />
-            <text x="1220" y="148" text-anchor="middle" class="flow-node-title">Decay + grava</text>
-            <text x="1220" y="175" text-anchor="middle" class="flow-node-sub">implementado</text>
+            <text x="1220" y="148" text-anchor="middle" class="flow-node-title">Merge + Decay</text>
+            <text x="1220" y="175" text-anchor="middle" class="flow-node-sub">grava o .md</text>
           </g>
         </svg>
       </div>
       <div class="flow-foot">
-        <span class="chip done">decaimento temporal aplica</span>
-        <span class="chip done">drafts viram .md</span>
-        <span class="chip todo">classificação real ainda em placeholder</span>
+        <span class="chip done">Judge LLM saiu do placeholder</span>
+        <span class="chip todo">heurística barata pré-judge: ainda falta</span>
+      </div>
+    </section>
+
+    <!-- 8. KPI — os números da semana -->
+    <section class="slide kpi ambient-breathe" data-transition="scale-fade">
+      <div class="kpi-head">
+        <span class="eyebrow">A semana em números</span>
+        <h2 class="kpi-title">Tudo <span class="italic-em">coberto por teste</span>.</h2>
+      </div>
+      <div class="kpi-grid">
+        <div class="kpi-block floating clickable" data-modal-open="tests-modal" role="button" tabindex="0" aria-haspopup="dialog" aria-label="Abrir lista dos 31 testes">
+          <span class="counter-value">31</span>
+          <span class="kpi-label-big">testes passando, escritos antes do código</span>
+          <span class="kpi-hint">clique para ver a lista</span>
+        </div>
+        <div class="kpi-block floating delay-1">
+          <span class="counter-value">5</span>
+          <span class="kpi-label-big">módulos novos: scoring, storage, sleep, reconcile, judge</span>
+        </div>
+        <div class="kpi-block floating delay-2">
+          <span class="counter-value">0</span>
+          <span class="kpi-label-big">duplicatas no vault depois da reconciliação</span>
+        </div>
       </div>
     </section>
 
@@ -915,13 +1048,13 @@
       <div class="bullets-inner">
         <span class="eyebrow">Próximo capítulo</span>
         <h2 class="bullets-title">
-          O que entra <span class="italic-em">na v0.2</span>.
+          O que entra <span class="italic-em">na v0.3</span>.
         </h2>
         <ol class="bullets-list">
-          <li><span class="todo-mark">→</span><div><strong>Judge real no sono.</strong><br/><span>Chamar litellm com o provider do config: escolher Major Tag, escrever sinopse, sugerir Go Deeper.</span></div></li>
-          <li><span class="todo-mark">→</span><div><strong>Heurística de feedback barata.</strong><br/><span>Sinais de correção/cobrança marcam candidatos antes do judge gastar token.</span></div></li>
-          <li><span class="todo-mark">→</span><div><strong>Cron daemon via APScheduler.</strong><br/><span>Hoje só roda manual. Próximo: dispara 03:00 sozinho, ou no horário do config.</span></div></li>
-          <li><span class="todo-mark">→</span><div><strong>Calibração em vault real.</strong><br/><span>Observar reativação, decaimento e piso emocional com uso contínuo antes de travar defaults.</span></div></li>
+          <li><span class="todo-mark">→</span><div><strong>Supressão a pedido do usuário.</strong><br/><span>"Esquece isso" → confirma com a sinopse → soft delete. Some pra IA, fica no banco.</span></div></li>
+          <li><span class="todo-mark">→</span><div><strong>Validar o judge ao vivo.</strong><br/><span>A lógica está testada; falta rodar com chave real e afinar o prompt por provider.</span></div></li>
+          <li><span class="todo-mark">→</span><div><strong>Heurística barata antes do judge.</strong><br/><span>Sinais de feedback/correção filtram rascunhos triviais e poupam token do LLM no sono.</span></div></li>
+          <li><span class="todo-mark">→</span><div><strong>Cron daemon via APScheduler.</strong><br/><span>O sono ainda roda manual. Próximo: dispara 03:00 sozinho, no horário do config.</span></div></li>
         </ol>
       </div>
     </section>
@@ -929,15 +1062,15 @@
     <!-- 10. COVER — encerramento devlog -->
     <section class="slide cover ambient-breathe" data-transition="scale-fade">
       <div class="cover-inner">
-        <span class="eyebrow">Fim do devlog 01</span>
+        <span class="eyebrow">Fim do devlog 02</span>
         <h1 class="cover-title">
           Próxima sessão:<br/>
-          <span class="italic-em shimmer">o sono ganha cérebro</span>.
+          <span class="italic-em shimmer">esquecer de propósito</span>.
         </h1>
-        <p class="cover-lead">Repositório no GitHub assim que o judge entrar em pé. Comentários e sugestões bem-vindas até lá.</p>
+        <p class="cover-lead">A supressão a pedido entra na v0.3. O repositório já está no ar — acompanhe a evolução por lá.</p>
         <div class="cover-foot">
           <span class="chip">sincron-brain-model</span>
-          <span class="chip ember">aguardando o LLM-as-judge</span>
+          <span class="chip done">no GitHub · v0.2</span>
         </div>
       </div>
     </section>
@@ -953,6 +1086,91 @@
     </div>
   </div>
 
+  </div>
+
+  <div class="modal-overlay" id="tests-modal" aria-hidden="true" role="dialog" aria-labelledby="tests-modal-title">
+    <div class="modal-panel">
+      <div class="modal-head">
+        <div>
+          <h3 class="modal-title" id="tests-modal-title">Os 31 testes da semana</h3>
+          <div class="modal-subtitle">5 módulos · todos via TDD · pytest verde</div>
+        </div>
+        <button class="modal-close" aria-label="Fechar" data-modal-close>&times;</button>
+      </div>
+      <div class="modal-body">
+        <section class="modal-section">
+          <div class="modal-section-head">
+            <span class="modal-section-title">scoring.py</span>
+            <span class="modal-section-count">9 testes · piso emocional</span>
+          </div>
+          <ol class="modal-test-list">
+            <li><span class="t-num">01</span><div><strong>raises_floor_by_step</strong> — primeiro feedback sobe o piso em +40.</div></li>
+            <li><span class="t-num">02</span><div><strong>uses_decreasing_impact_table</strong> — reforços sucessivos acumulam com impacto decrescente (40, 60, 70...).</div></li>
+            <li><span class="t-num">03</span><div><strong>caps_at_emotion_bonus_max</strong> — o piso para no teto (80), não dispara.</div></li>
+            <li><span class="t-num">04</span><div><strong>bumps_score_but_clamps_at_initial</strong> — score sobe com gatilho, não passa de 100.</div></li>
+            <li><span class="t-num">05</span><div><strong>lifts_a_decayed_memory</strong> — feedback em memória decaída a 2 a leva pra 42 (piso 40).</div></li>
+            <li><span class="t-num">06</span><div><strong>decay_reduces_score_over_days</strong> — decaimento aplica corretamente por dia (1.5/dia).</div></li>
+            <li><span class="t-num">07</span><div><strong>decay_never_drops_below_emotion_floor</strong> — piso emocional nunca cai abaixo, nem em 1000 dias.</div></li>
+            <li><span class="t-num">08</span><div><strong>decay_respects_global_floor_when_no_emotion</strong> — sem piso emocional, decai até o piso global (1).</div></li>
+            <li><span class="t-num">09</span><div><strong>decay_effective_floor_is_max_of_global_and_emotion</strong> — piso efetivo é o maior entre global e emocional.</div></li>
+          </ol>
+        </section>
+        <section class="modal-section">
+          <div class="modal-section-head">
+            <span class="modal-section-title">judge.py</span>
+            <span class="modal-section-count">9 testes · judge LLM</span>
+          </div>
+          <ol class="modal-test-list">
+            <li><span class="t-num">10</span><div><strong>parse_create_decision</strong> — parseia JSON de create válido.</div></li>
+            <li><span class="t-num">11</span><div><strong>parse_merge_maps_content_append</strong> — merge mapeia content_append no campo certo.</div></li>
+            <li><span class="t-num">12</span><div><strong>parse_merge_with_unknown_target_falls_back_to_create</strong> — alucinação de target_id vira create seguro.</div></li>
+            <li><span class="t-num">13</span><div><strong>parse_malformed_json_falls_back_to_create</strong> — JSON quebrado não derruba o sono.</div></li>
+            <li><span class="t-num">14</span><div><strong>parse_strips_code_fences</strong> — aguenta resposta dentro de cercas de código markdown.</div></li>
+            <li><span class="t-num">15</span><div><strong>build_messages_includes_draft_and_candidates</strong> — prompt inclui draft e sinopses dos candidatos.</div></li>
+            <li><span class="t-num">16</span><div><strong>judge_returns_merge_from_injected_llm</strong> — com complete fake devolvendo merge, decide merge.</div></li>
+            <li><span class="t-num">17</span><div><strong>judge_returns_create_from_injected_llm</strong> — idem com complete devolvendo create.</div></li>
+            <li><span class="t-num">18</span><div><strong>default_decider_without_api_key_is_create_only</strong> — sem chave, cai no decisor seguro automaticamente.</div></li>
+          </ol>
+        </section>
+        <section class="modal-section">
+          <div class="modal-section-head">
+            <span class="modal-section-title">reconcile.py</span>
+            <span class="modal-section-count">6 testes · dedup e merge</span>
+          </div>
+          <ol class="modal-test-list">
+            <li><span class="t-num">19</span><div><strong>find_candidates_by_shared_major_tag</strong> — acha candidatos por Major Tag em comum.</div></li>
+            <li><span class="t-num">20</span><div><strong>find_candidates_by_fts_content</strong> — acha candidatos por palavras-chave (FTS).</div></li>
+            <li><span class="t-num">21</span><div><strong>reconcile_create_writes_new_memory</strong> — decide create, grava memória nova.</div></li>
+            <li><span class="t-num">22</span><div><strong>reconcile_merge_enriches_without_duplicating</strong> — merge anexa, soma go_deeper e score, sem duplicar.</div></li>
+            <li><span class="t-num">23</span><div><strong>reconcile_merge_applies_emotion_trigger</strong> — merge emocional sobe o piso.</div></li>
+            <li><span class="t-num">24</span><div><strong>reconcile_bloat_guard_falls_back_to_create</strong> — anti-bloat: alvo muito grande vira create.</div></li>
+          </ol>
+        </section>
+        <section class="modal-section">
+          <div class="modal-section-head">
+            <span class="modal-section-title">sleep.py</span>
+            <span class="modal-section-count">4 testes · ciclo do sono</span>
+          </div>
+          <ol class="modal-test-list">
+            <li><span class="t-num">25</span><div><strong>decay_floors_at_emotion_floor</strong> — decaimento no run_sleep respeita o piso emocional.</div></li>
+            <li><span class="t-num">26</span><div><strong>decay_drops_to_global_floor_without_emotion</strong> — sem piso, cai até o piso global (1).</div></li>
+            <li><span class="t-num">27</span><div><strong>run_sleep_creates_memory_and_clears_draft</strong> — sono processa, cria memória, limpa a fila.</div></li>
+            <li><span class="t-num">28</span><div><strong>run_sleep_merges_with_injected_decider</strong> — end-to-end: sono funde sem duplicar.</div></li>
+          </ol>
+        </section>
+        <section class="modal-section">
+          <div class="modal-section-head">
+            <span class="modal-section-title">storage.py</span>
+            <span class="modal-section-count">3 testes · persistência</span>
+          </div>
+          <ol class="modal-test-list">
+            <li><span class="t-num">29</span><div><strong>memory_roundtrip_preserves_emotion_floor</strong> — grava e relê .md; emotion_floor volta como int.</div></li>
+            <li><span class="t-num">30</span><div><strong>search_fts_any_returns_partial_matches</strong> — FTS modo OR acha match parcial (recall).</div></li>
+            <li><span class="t-num">31</span><div><strong>index_stores_emotion_floor</strong> — índice SQLite guarda emotion_floor na coluna certa.</div></li>
+          </ol>
+        </section>
+      </div>
+    </div>
   </div>
 
   <div class="hud" id="hud">
@@ -1063,6 +1281,65 @@
       });
 
       slides[0].classList.add('active');
+    })();
+  </script>
+  <script>
+    (function() {
+      function openModal(id) {
+        var m = document.getElementById(id);
+        if (!m) return;
+        m.classList.add('open');
+        m.setAttribute('aria-hidden', 'false');
+        document.body.classList.add('modal-open', 'show-cursor');
+        var closeBtn = m.querySelector('[data-modal-close]');
+        if (closeBtn) closeBtn.focus();
+      }
+      function closeModal(m) {
+        if (!m) return;
+        m.classList.remove('open');
+        m.setAttribute('aria-hidden', 'true');
+        document.body.classList.remove('modal-open');
+      }
+      document.addEventListener('click', function(e) {
+        var opener = e.target.closest('[data-modal-open]');
+        if (opener) {
+          e.preventDefault();
+          e.stopPropagation();
+          openModal(opener.getAttribute('data-modal-open'));
+          return;
+        }
+        var closer = e.target.closest('[data-modal-close]');
+        if (closer) {
+          e.preventDefault();
+          e.stopPropagation();
+          closeModal(closer.closest('.modal-overlay'));
+          return;
+        }
+        if (e.target.classList && e.target.classList.contains('modal-overlay')) {
+          closeModal(e.target);
+        }
+      }, true);
+      document.addEventListener('keydown', function(e) {
+        var anyOpen = document.querySelector('.modal-overlay.open');
+        if (anyOpen) {
+          if (e.key === 'Escape') {
+            e.preventDefault();
+            e.stopPropagation();
+            closeModal(anyOpen);
+            return;
+          }
+          var block = ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown',' ','PageUp','PageDown','Home','End','a','A','t','T','f','F'];
+          if (block.indexOf(e.key) !== -1) {
+            e.stopPropagation();
+          }
+          return;
+        }
+        if ((e.key === 'Enter' || e.key === ' ') && document.activeElement && document.activeElement.hasAttribute && document.activeElement.hasAttribute('data-modal-open')) {
+          e.preventDefault();
+          e.stopPropagation();
+          openModal(document.activeElement.getAttribute('data-modal-open'));
+        }
+      }, true);
     })();
   </script>
 </body>

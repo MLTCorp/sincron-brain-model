@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Annotated
 
 import typer
 from platformdirs import user_data_dir
@@ -33,13 +34,15 @@ def _default_vault_path() -> Path:
 
 @app.command()
 def init(
-    path: Path = typer.Option(
-        None, "--path", help="Vault directory. Default: user data dir."
-    ),
-    provider: str = typer.Option(
-        None, "--provider", help="LLM judge provider (anthropic, openai, ...)."
-    ),
-    yes: bool = typer.Option(False, "--yes", "-y", help="Skip prompts, use defaults."),
+    path: Annotated[
+        Path | None, typer.Option("--path", help="Vault directory. Default: user data dir.")
+    ] = None,
+    provider: Annotated[
+        str | None, typer.Option("--provider", help="LLM judge provider (anthropic, openai, ...).")
+    ] = None,
+    yes: Annotated[
+        bool, typer.Option("--yes", "-y", help="Skip prompts, use defaults.")
+    ] = False,
 ) -> None:
     """Create a new memory vault."""
     vault_path = path or _default_vault_path()

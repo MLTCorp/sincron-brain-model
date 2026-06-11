@@ -2,7 +2,7 @@
 
 Plug-and-play memory layer for AI agents. Distributed as an MCP server.
 
-Any project with an AI can plug in and gain structured long-term memory inspired by Obsidian + human brain cognition: Major Tag → Tag → synopsis → content, with cognitive scoring (temporal decay, access bonuses, emotional weighting) and nightly sleep-based indexing.
+Any project with an AI can plug in and gain structured long-term memory inspired by Obsidian + human brain cognition: Major Tag → Tag → synopsis → content, with cognitive scoring (temporal decay, reactivation, and emotional floors) and nightly sleep-based indexing.
 
 ## Status
 
@@ -12,8 +12,9 @@ Any project with an AI can plug in and gain structured long-term memory inspired
 
 - **Major Tag → Tag is the sole retrieval axis.** No vector embeddings. The agent's own reasoning bridges semantic gaps.
 - **The agent receives only text.** Multimodal (audio, image, web) is the host app's responsibility — it textualizes, we organize.
-- **One API key.** A single LLM provider (the "judge") handles synopsis writing, tag selection, Go Deeper suggestion, and emotion weighting at sleep time.
-- **Sleep, not eager indexing.** Conversation flows in the host's context window during the day. The sleep cron (default 03:00) processes the draft queue.
+- **One API key.** A single LLM provider (the "judge") handles synopsis writing, tag selection, Go Deeper suggestion, merge decisions, and emotional-floor classification at sleep time.
+- **Sleep, not eager indexing.** Conversation flows in the host's context window during the day. The sleep cron (default 03:00) processes the draft queue, applies decay, and consolidates memory updates.
+- **Feedback, not narrated emotion.** Positive and negative feedback about the AI's answer or memory use can reinforce a memory floor. Emotion inside the narrated fact is stored as content, not as a reinforcement signal.
 
 See [CLAUDE.md](CLAUDE.md) for full architectural decisions.
 
@@ -44,6 +45,24 @@ sincron-brain stats
 sincron-brain sleep-now
 ```
 
+## Development
+
+On Windows/PowerShell:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
+.\.venv\Scripts\python.exe -m ruff check src tests
+.\.venv\Scripts\python.exe -m pytest
+```
+
+If Python was installed through Microsoft Store and `python` is not on PATH yet,
+use the Store alias directly:
+
+```powershell
+& "$env:LOCALAPPDATA\Microsoft\WindowsApps\python3.13.exe" -m venv .venv
+```
+
 ## MCP client configuration
 
 Add to your MCP client config (Claude Desktop / Claude Code / Cursor / etc.):
@@ -70,10 +89,26 @@ After restart, your agent will have access to these tools:
 | `remember(content, source_type, asset_ref, hint_tags, metadata)` | Queue content for indexing at next sleep. |
 | `list_major_tags()` | List all themes in the vault. Entry point for navigation. |
 | `list_tags(major_tag, min_score, limit)` | List memory cards (id + synopsis) under a theme. |
-| `read_memory(memory_id)` | Open full content of a specific memory. |
+| `read_memory(memory_id)` | Inspect full content of a candidate memory without changing score. |
+| `use_memories(memory_ids, reason)` | Fetch final answer context and queue sleep-time reactivation. |
 | `search(query, limit)` | Full-text fallback when tag navigation isn't enough. |
 | `sleep_now()` | Force indexing job to run immediately. |
 | `stats()` | Vault diagnostics. |
+
+## Scoring model
+
+Scores stay in a 1-100 range. New memories start at `100`, temporal decay lowers stale memories by `1.5` points per day, and the global floor is `1`.
+
+Emotional reinforcement uses `emotion_floor`, not a score above 100. Feedback or correction about the AI's answer/memory use raises that floor with decreasing impact:
+
+```text
+40, +20, +10, +5, +3, +2
+max emotion_floor = 80
+```
+
+Positive and negative feedback use the same table. For example, "you remembered this perfectly" and "I already told you this, don't ask again" are both priority signals. A sentence like "this client frustrated me by paying late" is stored as memory content, but does not raise the emotional floor by itself.
+
+Exploratory navigation does not reinforce memories: `list_major_tags()`, `list_tags()`, `search()`, and `read_memory()` are neutral. When the host/agent decides which memories will actually inform the final answer, it calls `use_memories()`. That queues a reactivation event; the next sleep consolidates drafts first, applies decay, then sets the used final memories back to `100`.
 
 ## Vault structure
 
@@ -83,6 +118,8 @@ memory/
 ├── _index.sqlite           ← rebuildable index (scores, FTS, metadata)
 ├── _draft/                 ← queue waiting for next sleep
 │   └── 20260513-143200-xyz.json
+├── _reactivation/          ← memories used in final answer context
+│   └── 20260513-151000-reactivation.json
 ├── pessoas/
 │   ├── mateus-massari-abc12345.md
 │   └── luizao-def67890.md

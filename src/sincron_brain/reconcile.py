@@ -99,12 +99,14 @@ def _apply_merge(target: Memory, decision: Decision, config: VaultConfig) -> Mem
         target.content = f"{target.content}\n\n{decision.content}".strip()
     target.go_deeper = sorted(set(target.go_deeper) | set(decision.go_deeper))
     target.major_tags = sorted(set(target.major_tags) | set(decision.major_tags))
-    target.score = min(config.score.initial, target.score + config.score.access_bonus)
+    now = datetime.now(UTC)
+    target.score = config.score.initial
+    target.last_scored = now
     if decision.emotional:
         target.score, target.emotion_floor = scoring.apply_emotion_trigger(
             target.score, target.emotion_floor, config.score
         )
-    target.last_accessed = datetime.now(UTC)
+    target.last_accessed = now
     return target
 
 

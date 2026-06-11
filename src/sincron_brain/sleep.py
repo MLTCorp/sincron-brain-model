@@ -3,7 +3,8 @@
 Each draft is reconciled (see reconcile.py): the injected decider chooses to
 create a new memory or enrich an existing one, so re-touched topics aggregate
 instead of duplicating. After draining the queue, every memory's score decays,
-floored at its emotional floor.
+floored at its emotional floor. Reactivation events are applied last, so
+memories used in final answer context return to the surface after consolidation.
 
 The default decider indexes every draft as new (no dedup). The LLM judge — the
 next milestone — is wired in as the real decider to enable merging.
@@ -20,10 +21,10 @@ from sincron_brain.reconcile import Decider
 
 
 def run_sleep(config: VaultConfig, decide: Decider | None = None) -> dict:
-    """Drain the draft queue through reconciliation, then decay. Returns counters."""
+    """Drain drafts, decay stale memories, then apply reactivation events."""
     decide = decide or reconcile.create_only
     start = time.monotonic()
-    created = merged = 0
+    created = merged = reactivated = 0
 
     with storage.open_db(config) as conn:
         for path, draft in storage.iter_drafts(config):
@@ -36,10 +37,21 @@ def run_sleep(config: VaultConfig, decide: Decider | None = None) -> dict:
 
         _apply_decay(conn, config)
 
+        for path, event in storage.iter_reactivations(config):
+            seen: set[str] = set()
+            for memory_id in event.memory_ids:
+                if memory_id in seen:
+                    continue
+                seen.add(memory_id)
+                if storage.reactivate_memory(config, conn, memory_id) is not None:
+                    reactivated += 1
+            path.unlink()
+
     return {
         "processed": created + merged,
         "created": created,
         "merged": merged,
+        "reactivated": reactivated,
         "duration_seconds": round(time.monotonic() - start, 3),
     }
 
