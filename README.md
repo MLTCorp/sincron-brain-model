@@ -23,16 +23,19 @@ See [CLAUDE.md](CLAUDE.md) for full architectural decisions.
 Windows / PowerShell one-command install:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/MLTCorp/sincron-brain-model/main/install.ps1 | iex"
+Set-ExecutionPolicy -Scope Process Bypass -Force; irm https://raw.githubusercontent.com/MLTCorp/sincron-brain-model/main/install.ps1 | iex
 ```
 
 The installer is plug-and-play: it installs `uv` for the current user if needed,
-then installs the `sincron-brain` CLI from this GitHub repository.
+then installs the `sincron-brain` CLI from this GitHub repository, updates the
+user PATH, and creates a compatibility command shim when the current terminal or
+agent has not reloaded PATH yet.
 
-If you already trust your PowerShell execution policy, this shorter command also works:
+If the repository is private, the raw GitHub URL returns `404`. In that case,
+run the checked-out installer directly from this repository:
 
 ```powershell
-irm https://raw.githubusercontent.com/MLTCorp/sincron-brain-model/main/install.ps1 | iex
+Set-ExecutionPolicy -Scope Process Bypass -Force; & "C:\Projetos\GitHub-Clones\sincron-brain-model\install.ps1"
 ```
 
 ## Quick start

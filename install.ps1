@@ -4,11 +4,37 @@ $Source = "git+https://github.com/MLTCorp/sincron-brain-model.git"
 $UvInstallUrl = "https://astral.sh/uv/install.ps1"
 $LocalBin = Join-Path $env:USERPROFILE ".local\bin"
 
-function Add-PathForCurrentSession {
+function Get-PathItems {
+    param([string]$PathValue)
+
+    if ([string]::IsNullOrWhiteSpace($PathValue)) {
+        return @()
+    }
+
+    return @($PathValue -split ";" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+}
+
+function Add-PathForSessionAndUser {
     param([string]$PathToAdd)
 
-    if ((Test-Path -LiteralPath $PathToAdd) -and (($env:Path -split ";") -notcontains $PathToAdd)) {
+    if (-not (Test-Path -LiteralPath $PathToAdd)) {
+        New-Item -ItemType Directory -Path $PathToAdd -Force | Out-Null
+    }
+
+    $sessionPathItems = Get-PathItems $env:Path
+    if ($sessionPathItems -notcontains $PathToAdd) {
         $env:Path = "$PathToAdd;$env:Path"
+    }
+
+    $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+    $userPathItems = Get-PathItems $userPath
+    if ($userPathItems -notcontains $PathToAdd) {
+        $newUserPath = if ([string]::IsNullOrWhiteSpace($userPath)) {
+            $PathToAdd
+        } else {
+            "$PathToAdd;$userPath"
+        }
+        [Environment]::SetEnvironmentVariable("Path", $newUserPath, "User")
     }
 }
 
@@ -23,18 +49,113 @@ function Find-CommandPath {
     return $null
 }
 
+function Test-WritableDirectory {
+    param([string]$Directory)
+
+    if (-not (Test-Path -LiteralPath $Directory)) {
+        return $false
+    }
+
+    $probe = Join-Path $Directory ".sincron-brain-write-test"
+    try {
+        Set-Content -LiteralPath $probe -Value "ok" -Encoding ASCII -Force
+        Remove-Item -LiteralPath $probe -Force
+        return $true
+    } catch {
+        return $false
+    }
+}
+
+function Find-ExistingUserPathDirectory {
+    $userRoot = [System.IO.Path]::GetFullPath($env:USERPROFILE)
+    $candidates = @()
+
+    foreach ($item in (Get-PathItems $env:Path)) {
+        $expanded = [Environment]::ExpandEnvironmentVariables($item).Trim()
+        if ([string]::IsNullOrWhiteSpace($expanded)) {
+            continue
+        }
+
+        try {
+            $full = [System.IO.Path]::GetFullPath($expanded)
+        } catch {
+            continue
+        }
+
+        if (-not $full.StartsWith($userRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+            continue
+        }
+
+        if ($full -like "*\Microsoft\WindowsApps*") {
+            continue
+        }
+
+        if ($full -like "*\.codex\tmp*") {
+            continue
+        }
+
+        if ($full -like "*\AppData\Local\Temp*") {
+            continue
+        }
+
+        if ($full -like "*\Temp*") {
+            continue
+        }
+
+        if (-not (Test-WritableDirectory $full) -or ($full -eq $LocalBin)) {
+            continue
+        }
+
+        $priority = 100
+        if ($full -like "*\Python*\Scripts") {
+            $priority = 10
+        } elseif ($full -like "*\AppData\Roaming\npm") {
+            $priority = 20
+        }
+
+        $candidates += [pscustomobject]@{
+            Directory = $full
+            Priority = $priority
+        }
+    }
+
+    $selected = $candidates | Sort-Object Priority, Directory | Select-Object -First 1
+    if ($selected) {
+        return $selected.Directory
+    }
+
+    return $null
+}
+
+function Install-CommandShim {
+    param(
+        [string]$CommandName,
+        [string]$TargetExe
+    )
+
+    $shimDir = Find-ExistingUserPathDirectory
+    if (-not $shimDir) {
+        return $null
+    }
+
+    $shimPath = Join-Path $shimDir "$CommandName.cmd"
+    $shimBody = "@echo off`r`n`"$TargetExe`" %*`r`n"
+    Set-Content -LiteralPath $shimPath -Value $shimBody -Encoding ASCII -Force
+    return $shimPath
+}
+
 Write-Host ""
 Write-Host "Sincron Brain installer" -ForegroundColor Cyan
 Write-Host "Installing from: $Source"
 Write-Host ""
 
-Add-PathForCurrentSession $LocalBin
+Add-PathForSessionAndUser $LocalBin
 
 $uv = Find-CommandPath "uv"
 if (-not $uv) {
     Write-Host "uv was not found. Installing uv for the current user..."
     Invoke-RestMethod $UvInstallUrl | Invoke-Expression
-    Add-PathForCurrentSession $LocalBin
+    Add-PathForSessionAndUser $LocalBin
     $uv = Find-CommandPath "uv"
 }
 
@@ -46,16 +167,29 @@ Write-Host "Using uv: $uv"
 Write-Host "Installing sincron-brain..."
 & $uv tool install --force $Source
 
-Add-PathForCurrentSession $LocalBin
+Add-PathForSessionAndUser $LocalBin
 $sincronBrain = Find-CommandPath "sincron-brain"
+$expectedSincronBrain = Join-Path $LocalBin "sincron-brain.exe"
+
+if (-not $sincronBrain -and (Test-Path -LiteralPath $expectedSincronBrain)) {
+    $sincronBrain = $expectedSincronBrain
+}
+
+$shim = $null
+if ($sincronBrain) {
+    $shim = Install-CommandShim "sincron-brain" $sincronBrain
+}
 
 Write-Host ""
 if ($sincronBrain) {
     Write-Host "sincron-brain installed successfully." -ForegroundColor Green
     Write-Host "Command: $sincronBrain"
+    if ($shim) {
+        Write-Host "Compatibility shim: $shim"
+    }
 } else {
     Write-Host "sincron-brain was installed, but it is not visible in this PowerShell session yet." -ForegroundColor Yellow
-    Write-Host "Open a new PowerShell window and run: sincron-brain --help"
+    Write-Host "Try: $expectedSincronBrain --help"
 }
 
 Write-Host ""
