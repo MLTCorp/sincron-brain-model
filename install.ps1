@@ -144,6 +144,34 @@ function Install-CommandShim {
     return $shimPath
 }
 
+function Stop-RunningSincronBrain {
+    $currentPid = $PID
+    $patterns = @(
+        "\\.local\\bin\\sincron-brain\\.exe",
+        "\\uv\\tools\\sincron-brain-model\\",
+        "sincron-brain serve",
+        "sincron_brain"
+    )
+
+    $processes = Get-CimInstance Win32_Process | Where-Object {
+        $commandLine = $_.CommandLine
+        if ([string]::IsNullOrWhiteSpace($commandLine)) {
+            return $false
+        }
+        foreach ($pattern in $patterns) {
+            if ($commandLine -match $pattern) {
+                return $_.ProcessId -ne $currentPid
+            }
+        }
+        return $false
+    }
+
+    foreach ($process in $processes) {
+        Write-Host "Stopping running sincron-brain process: $($process.ProcessId)"
+        Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue
+    }
+}
+
 Write-Host ""
 Write-Host "Sincron Brain installer" -ForegroundColor Cyan
 Write-Host "Installing from: $Source"
@@ -165,7 +193,11 @@ if (-not $uv) {
 
 Write-Host "Using uv: $uv"
 Write-Host "Installing sincron-brain..."
+Stop-RunningSincronBrain
 & $uv tool install --force $Source
+if ($LASTEXITCODE -ne 0) {
+    throw "uv failed to install sincron-brain. Close MCP clients/agents that may still be using it, then run this installer again."
+}
 
 Add-PathForSessionAndUser $LocalBin
 $sincronBrain = Find-CommandPath "sincron-brain"

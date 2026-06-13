@@ -60,7 +60,9 @@ sincron-brain sleep-now
 `connect` is the recommended plug-and-play path. It creates the vault if needed
 and writes a project-level `.mcp.json` like this. For Claude Code projects, it
 also syncs `.claude/settings.local.json` so the `sincron-brain` server is enabled
-and stale project MCP entries are removed.
+and stale project MCP entries are removed. It also writes a managed memory
+instruction block to `AGENTS.md`/`CLAUDE.md`, so agents know when to consult
+`use_memories()` and when to save durable facts with `remember()`.
 
 ```json
 {

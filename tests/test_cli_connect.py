@@ -32,6 +32,8 @@ def test_connect_creates_vault_and_project_mcp_config(tmp_path):
         (project / ".claude" / "settings.local.json").read_text(encoding="utf-8")
     )
     assert settings["enabledMcpjsonServers"] == ["sincron-brain"]
+    assert "use_memories(ids)" in (project / "AGENTS.md").read_text(encoding="utf-8")
+    assert "use_memories(ids)" in (project / "CLAUDE.md").read_text(encoding="utf-8")
 
 
 def test_connect_preserves_existing_mcp_servers_and_syncs_claude_settings(tmp_path):
@@ -76,6 +78,32 @@ def test_connect_preserves_existing_mcp_servers_and_syncs_claude_settings(tmp_pa
     )
     assert settings["someOtherSetting"] is True
     assert settings["enabledMcpjsonServers"] == ["other", "sincron-brain"]
+
+
+def test_connect_updates_existing_agent_instruction_files_idempotently(tmp_path):
+    project = tmp_path / "project"
+    vault = tmp_path / "memory"
+    project.mkdir()
+    (project / "AGENTS.md").write_text(
+        "# Existing instructions\n\nKeep this line.\n",
+        encoding="utf-8",
+    )
+
+    first = runner.invoke(
+        app,
+        ["connect", "--path", str(vault), "--project", str(project)],
+    )
+    second = runner.invoke(
+        app,
+        ["connect", "--path", str(vault), "--project", str(project)],
+    )
+
+    assert first.exit_code == 0
+    assert second.exit_code == 0
+    agents = (project / "AGENTS.md").read_text(encoding="utf-8")
+    assert "Keep this line." in agents
+    assert agents.count("sincron-brain-memory:start") == 1
+    assert "CLAUDE.md" not in {path.name for path in project.iterdir()}
 
 
 def test_stats_uses_local_project_mcp_config(tmp_path, monkeypatch):

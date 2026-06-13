@@ -129,8 +129,11 @@ def connect(
 
     mcp_file = _write_project_mcp_config(project_path, config)
     claude_settings = _sync_claude_project_settings(project_path)
+    instruction_files = _sync_agent_instruction_files(project_path)
     console.print(f"[green]MCP config written:[/] {mcp_file}")
     console.print(f"[green]Claude project settings synced:[/] {claude_settings}")
+    for instruction_file in instruction_files:
+        console.print(f"[green]Agent instructions synced:[/] {instruction_file}")
     console.print()
     console.print("[bold]Next steps:[/]")
     console.print("  1. Restart your MCP client/agent.")
@@ -266,6 +269,53 @@ def _sync_claude_project_settings(project_path: Path) -> Path:
         encoding="utf-8",
     )
     return settings_file
+
+
+MEMORY_INSTRUCTIONS_START = "<!-- sincron-brain-memory:start -->"
+MEMORY_INSTRUCTIONS_END = "<!-- sincron-brain-memory:end -->"
+MEMORY_INSTRUCTIONS_BLOCK = f"""{MEMORY_INSTRUCTIONS_START}
+## Sincron Brain Memory
+
+Use the `sincron-brain` MCP server as the project's long-term memory layer.
+
+- Before answering questions that may depend on prior project/user context, inspect memory first:
+  `list_major_tags()` or `search()` -> `list_tags()` -> `use_memories(ids)`.
+- Use `use_memories(ids)` when memory content is used in an answer. Do not use `read_memory()`
+  for normal answers, because `use_memories()` queues reactivation for sleep-time scoring.
+- Use `remember()` for durable facts, user preferences, project decisions, corrections, and
+  information the user explicitly asks you to remember.
+- Do not store secrets, API keys, tokens, passwords, or unrelated transient chatter.
+- `remember()` only queues drafts. The sleep job indexes drafts later with `sleep_now()` or the
+  configured sleep routine.
+{MEMORY_INSTRUCTIONS_END}
+"""
+
+
+def _sync_agent_instruction_files(project_path: Path) -> list[Path]:
+    candidates = [project_path / "AGENTS.md", project_path / "CLAUDE.md"]
+    existing = [path for path in candidates if path.exists()]
+    targets = existing or candidates
+    synced = []
+
+    for path in targets:
+        current = path.read_text(encoding="utf-8") if path.exists() else ""
+        updated = _upsert_managed_block(current, MEMORY_INSTRUCTIONS_BLOCK)
+        path.write_text(updated, encoding="utf-8")
+        synced.append(path)
+
+    return synced
+
+
+def _upsert_managed_block(current: str, block: str) -> str:
+    if MEMORY_INSTRUCTIONS_START in current and MEMORY_INSTRUCTIONS_END in current:
+        before = current.split(MEMORY_INSTRUCTIONS_START, 1)[0].rstrip()
+        after = current.split(MEMORY_INSTRUCTIONS_END, 1)[1].lstrip()
+        parts = [before, block.strip(), after.rstrip()]
+        return "\n\n".join(part for part in parts if part) + "\n"
+
+    if current.strip():
+        return current.rstrip() + "\n\n" + block
+    return block
 
 
 def _vault_path_from_project_mcp_config(project_path: Path) -> str | None:
