@@ -8,7 +8,13 @@ from pathlib import Path
 
 from sincron_brain import reconcile
 from sincron_brain.config import JudgeConfig, VaultConfig
-from sincron_brain.judge import build_messages, default_decider, make_judge, parse_decision
+from sincron_brain.judge import (
+    _litellm_completion,
+    build_messages,
+    default_decider,
+    make_judge,
+    parse_decision,
+)
 from sincron_brain.models import DraftItem
 from sincron_brain.reconcile import Candidate
 
@@ -95,3 +101,49 @@ def test_default_decider_without_api_key_is_create_only():
         judge=JudgeConfig(api_key_env="SBM_DEFINITELY_UNSET_KEY"),
     )
     assert default_decider(cfg) is reconcile.create_only
+
+
+def test_default_decider_without_api_key_is_provider_agnostic(monkeypatch):
+    monkeypatch.delenv("SBM_DEFINITELY_UNSET_KEY", raising=False)
+    for provider in ["anthropic", "openai", "google", "mistral", "ollama", "custom"]:
+        cfg = VaultConfig(
+            vault_path=Path("/vault"),
+            judge=JudgeConfig(
+                provider=provider,
+                model="model-x",
+                api_key_env="SBM_DEFINITELY_UNSET_KEY",
+            ),
+        )
+        assert default_decider(cfg) is reconcile.create_only
+
+
+def test_litellm_completion_routes_provider_and_model(monkeypatch):
+    calls = []
+
+    class _Message:
+        content = '{"action":"create","synopsis":"ok"}'
+
+    class _Choice:
+        message = _Message()
+
+    class _Response:
+        def __init__(self):
+            self.choices = [_Choice()]
+
+    def fake_completion(**kwargs):
+        calls.append(kwargs)
+        return _Response()
+
+    monkeypatch.setattr("litellm.completion", fake_completion)
+    monkeypatch.setenv("SBM_TEST_KEY", "secret")
+    cfg = VaultConfig(
+        vault_path=Path("/vault"),
+        judge=JudgeConfig(provider="openai", model="gpt-test", api_key_env="SBM_TEST_KEY"),
+    )
+
+    raw = _litellm_completion(cfg)([{"role": "user", "content": "hello"}])
+
+    assert raw == '{"action":"create","synopsis":"ok"}'
+    assert calls[0]["model"] == "openai/gpt-test"
+    assert calls[0]["api_key"] == "secret"
+    assert calls[0]["temperature"] == 0

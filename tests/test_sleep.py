@@ -117,3 +117,73 @@ def test_run_sleep_reactivates_used_memories_after_decay(tmp_path):
         ).fetchone()
     assert row["score"] == config.score.initial
     assert row["access_count"] == 1
+
+
+def test_sleep_simulates_days_emotion_floor_and_reactivation(tmp_path):
+    config = make_config(tmp_path)
+    storage.write_draft(
+        config,
+        DraftItem(
+            id="d-emotional",
+            content="Usuario corrigiu a IA: eu ja disse que a API key fica no arquivo .env.",
+            hint_tags=["projeto"],
+        ),
+    )
+
+    def emotional_create(_draft, _candidates):
+        return Decision(
+            action="create",
+            major_tags=["projeto"],
+            synopsis="API key fica no arquivo .env.",
+            emotional=True,
+        )
+
+    sleep.run_sleep(config, decide=emotional_create)
+
+    with storage.open_db(config) as conn:
+        row = conn.execute(
+            "SELECT id, score, emotion_floor FROM memories"
+        ).fetchone()
+        memory_id = row["id"]
+        assert row["score"] == config.score.initial
+        assert row["emotion_floor"] == 40
+        _backdate(conn, memory_id, days=1000)
+
+    sleep.run_sleep(config)
+
+    with storage.open_db(config) as conn:
+        decayed = conn.execute(
+            "SELECT score, emotion_floor, access_count FROM memories WHERE id = ?",
+            (memory_id,),
+        ).fetchone()
+        assert decayed["score"] == 40
+        assert decayed["emotion_floor"] == 40
+        assert decayed["access_count"] == 0
+
+    storage.write_reactivation(
+        config,
+        ReactivationEvent(id="r-emotional", memory_ids=[memory_id], reason="used correction"),
+    )
+    sleep.run_sleep(config)
+
+    with storage.open_db(config) as conn:
+        reactivated = conn.execute(
+            "SELECT score, emotion_floor, access_count FROM memories WHERE id = ?",
+            (memory_id,),
+        ).fetchone()
+        assert reactivated["score"] == config.score.initial
+        assert reactivated["emotion_floor"] == 40
+        assert reactivated["access_count"] == 1
+        _backdate(conn, memory_id, days=19)
+
+    sleep.run_sleep(config)
+
+    with storage.open_db(config) as conn:
+        later = conn.execute(
+            "SELECT score, emotion_floor, access_count FROM memories WHERE id = ?",
+            (memory_id,),
+        ).fetchone()
+
+    assert later["score"] == 71
+    assert later["emotion_floor"] == 40
+    assert later["access_count"] == 1
