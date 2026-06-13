@@ -265,7 +265,17 @@ def render_viewer_html(data: dict[str, Any]) -> str:
     }}
     p {{ margin: 0; }}
     .muted {{ color: var(--stone); font-size: 13px; line-height: 1.45; }}
-    .brand {{ display: flex; gap: 14px; align-items: center; margin-bottom: 18px; }}
+    .brand {{
+      display: flex;
+      gap: 14px;
+      align-items: center;
+      margin-bottom: 18px;
+      padding: 14px;
+      background: #0e0f12;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: var(--radius-ui);
+      box-shadow: 0 16px 34px rgba(14, 15, 18, 0.16);
+    }}
     .brand-logo {{
       width: 62px;
       height: 62px;
@@ -273,9 +283,20 @@ def render_viewer_html(data: dict[str, Any]) -> str:
       object-fit: cover;
       background: #000;
       flex: 0 0 auto;
-      box-shadow: 0 10px 24px rgba(14, 15, 18, 0.16);
+      box-shadow: none;
     }}
-    .brand h1 {{ margin: 0 0 4px; }}
+    .brand h1 {{
+      margin: 0 0 4px;
+      color: #fbfaf7;
+      font-family: "Instrument Serif", Georgia, "Times New Roman", serif;
+      font-size: 32px;
+      letter-spacing: -0.02em;
+    }}
+    .brand h1 em {{
+      color: var(--ember-500);
+      font-style: italic;
+    }}
+    .brand .muted {{ color: rgba(251, 250, 247, 0.68); }}
     .credit {{
       border-top: 1px solid var(--line);
       margin-top: 20px;
@@ -500,7 +521,7 @@ def render_viewer_html(data: dict[str, Any]) -> str:
     <div class="brand">
       <img id="brandLogo" class="brand-logo" alt="Sincron IA">
       <div>
-        <h1>Sincron Brain</h1>
+        <h1>Sincron <em>Brain</em></h1>
         <p class="muted">Visualizador de memórias</p>
       </div>
     </div>
