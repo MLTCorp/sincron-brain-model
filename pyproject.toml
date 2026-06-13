@@ -51,6 +51,9 @@ Repository = "https://github.com/MLTCorp/sincron-brain-model"
 [tool.hatch.build.targets.wheel]
 packages = ["src/sincron_brain"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"src/sincron_brain/assets/logo-sincronia.jpg" = "sincron_brain/assets/logo-sincronia.jpg"
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"

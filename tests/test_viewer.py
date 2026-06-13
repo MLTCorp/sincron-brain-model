@@ -56,6 +56,9 @@ def test_build_viewer_data_includes_memory_tags_go_deeper_and_sleep(tmp_path):
     assert memories["a"]["score"] == 88
     assert memories["a"]["emotion_floor"] == 40
     assert memories["a"]["go_deeper"] == ["b"]
+    assert data["branding"]["logo_data_uri"].startswith("data:image/jpeg;base64,")
+    assert data["branding"]["developer"] == "Sincron IA"
+    assert data["branding"]["author"] == "Matheus Massari"
     assert {"from": "a", "to": "b"} in data["go_deeper_edges"]
     assert any(tag["major_tag"] == "projeto" for tag in data["major_tags"])
     assert any(tag["tag"] == "api-key" for tag in data["tags"])
@@ -76,6 +79,10 @@ def test_write_viewer_outputs_self_contained_html(tmp_path):
 
     assert path.name == "_viewer.html"
     assert "Sincron Brain Viewer" in html
+    assert "Desenvolvido por Sincron IA" in html
+    assert "sincronia.digital" in html
+    assert "Autor Matheus Massari" in html
+    assert "data:image/jpeg;base64," in html
     assert "viewer-data" in html
     assert "Conteúdo" in html
 

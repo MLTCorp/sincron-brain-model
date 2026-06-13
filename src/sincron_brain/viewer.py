@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+from base64 import b64encode
 from collections import Counter
 from datetime import UTC, datetime
+from importlib import resources
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +14,7 @@ from sincron_brain import storage
 from sincron_brain.config import VaultConfig
 
 VIEWER_FILENAME = "_viewer.html"
+LOGO_RESOURCE = "assets/logo-sincronia.jpg"
 
 
 def write_viewer(config: VaultConfig, output: Path | None = None) -> Path:
@@ -84,6 +87,12 @@ def build_viewer_data(config: VaultConfig) -> dict[str, Any]:
             "audit_enabled": config.audit.enabled,
             "audit_retention_days": config.audit.retention_days,
         },
+        "branding": {
+            "logo_data_uri": _logo_data_uri(),
+            "developer": "Sincron IA",
+            "website": "sincronia.digital",
+            "author": "Matheus Massari",
+        },
         "stats": stats,
         "major_tags": major_tags,
         "tags": [{"tag": tag, "count": count} for tag, count in tag_counts.most_common()],
@@ -93,6 +102,14 @@ def build_viewer_data(config: VaultConfig) -> dict[str, Any]:
         "audit": audit[-500:],
         "queues": queues,
     }
+
+
+def _logo_data_uri() -> str:
+    try:
+        logo = resources.files("sincron_brain").joinpath(LOGO_RESOURCE).read_bytes()
+    except (FileNotFoundError, ModuleNotFoundError):
+        return ""
+    return "data:image/jpeg;base64," + b64encode(logo).decode("ascii")
 
 
 def _queue_items(directory: Path) -> list[dict[str, Any]]:
@@ -179,6 +196,13 @@ def render_viewer_html(data: dict[str, Any]) -> str:
     h3 {{ font-size: 14px; margin: 0 0 8px; }}
     p {{ margin: 0; }}
     .muted {{ color: var(--muted); font-size: 13px; }}
+    .brand {{ display: flex; gap: 12px; align-items: center; margin-bottom: 14px; }}
+    .brand-logo {{ width: 58px; height: 58px; border-radius: var(--radius); object-fit: cover; background: #000; flex: 0 0 auto; }}
+    .brand h1 {{ margin: 0 0 4px; }}
+    .credit {{ border-top: 1px solid var(--line); margin-top: 18px; padding-top: 14px; display: grid; gap: 3px; font-size: 12px; color: var(--muted); }}
+    .credit strong {{ color: var(--ink); font-size: 13px; }}
+    .credit a {{ color: var(--accent); text-decoration: none; }}
+    .credit a:hover {{ text-decoration: underline; }}
     .stack {{ display: grid; gap: 12px; }}
     .stats {{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 16px 0; }}
     .stat {{ background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px; }}
@@ -220,13 +244,24 @@ def render_viewer_html(data: dict[str, Any]) -> str:
 <body>
 <div class="app">
   <aside>
-    <h1>Sincron Brain</h1>
+    <div class="brand">
+      <img id="brandLogo" class="brand-logo" alt="Sincron IA">
+      <div>
+        <h1>Sincron Brain</h1>
+        <p class="muted">Memory debug viewer</p>
+      </div>
+    </div>
     <p class="muted" id="vaultPath"></p>
     <div class="stats" id="stats"></div>
     <div class="stack">
       <label>Busca <input id="search" type="search" placeholder="id, conteúdo, sinopse, tag"></label>
       <label>Major tag <select id="tagFilter"></select></label>
       <label>Score mínimo <input id="scoreFilter" type="number" min="0" max="100" value="0"></label>
+    </div>
+    <div class="credit">
+      <strong>Desenvolvido por Sincron IA</strong>
+      <a href="https://sincronia.digital">sincronia.digital</a>
+      <span>Autor Matheus Massari</span>
     </div>
   </aside>
   <main>
@@ -255,6 +290,10 @@ const fmt = value => value === null || value === undefined || value === '' ? '-'
 const esc = value => fmt(value).replace(/[&<>"']/g, ch => ({{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}}[ch]));
 function shortId(id) {{ return id.length > 34 ? id.slice(0, 31) + '...' : id; }}
 function init() {{
+  const branding = DATA.branding || {{}};
+  const logo = document.getElementById('brandLogo');
+  if (branding.logo_data_uri) logo.src = branding.logo_data_uri;
+  else logo.classList.add('hidden');
   document.getElementById('vaultPath').textContent = DATA.vault_path;
   document.getElementById('stats').innerHTML = [
     ['Memórias', DATA.stats.total],
