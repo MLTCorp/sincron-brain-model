@@ -172,70 +172,322 @@ def render_viewer_html(data: dict[str, Any]) -> str:
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Sincron Brain Viewer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Sora:wght@400;600;700&display=swap" rel="stylesheet">
   <style>
     :root {{
       color-scheme: light;
-      --bg: #f6f7f4;
-      --panel: #ffffff;
-      --ink: #18201b;
-      --muted: #667067;
-      --line: #d9ded6;
-      --accent: #1f7a5c;
-      --warn: #b7791f;
+      --canvas: #fbfaf7;
+      --fog: #f4f2ee;
+      --warm-mist: #fbe6d6;
+      --ink: #0e0f12;
+      --ink-soft: #1c1e22;
+      --graphite: #3b3d42;
+      --stone: #6e7079;
+      --hint: #c5c6cb;
+      --ember-300: #ff9450;
+      --ember-500: #ed5e0a;
+      --brand-blue: #0f4761;
       --danger: #b42318;
-      --soft: #e7f2ec;
-      --radius: 8px;
-      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --panel: rgba(255, 255, 255, 0.72);
+      --line: rgba(197, 198, 203, 0.75);
+      --soft: rgba(251, 230, 214, 0.62);
+      --shadow: 0 22px 60px rgba(14, 15, 18, 0.12);
+      --radius-card: 18px;
+      --radius-ui: 8px;
+      font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }}
     * {{ box-sizing: border-box; }}
-    body {{ margin: 0; background: var(--bg); color: var(--ink); }}
-    .app {{ min-height: 100vh; display: grid; grid-template-columns: 300px minmax(0, 1fr); }}
-    aside {{ border-right: 1px solid var(--line); background: #eef1ea; padding: 20px; overflow: auto; }}
-    main {{ padding: 20px; overflow: auto; }}
-    h1 {{ font-size: 24px; margin: 0 0 8px; letter-spacing: 0; }}
-    h2 {{ font-size: 17px; margin: 0 0 12px; }}
-    h3 {{ font-size: 14px; margin: 0 0 8px; }}
+    html {{ background: #e8e6e0; }}
+    body {{
+      margin: 0;
+      min-height: 100vh;
+      background: #e8e6e0;
+      color: var(--ink);
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }}
+    .app {{
+      width: min(1540px, calc(100vw - 48px));
+      min-height: calc(100vh - 48px);
+      margin: 24px auto;
+      display: grid;
+      grid-template-columns: 320px minmax(0, 1fr);
+      position: relative;
+      overflow: hidden;
+      background:
+        linear-gradient(135deg, rgba(251, 250, 247, 0.98) 0%, rgba(251, 250, 247, 0.9) 58%, rgba(244, 242, 238, 0.96) 100%);
+      border: 1px solid rgba(255, 255, 255, 0.72);
+      box-shadow: var(--shadow);
+    }}
+    .app::before {{
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--brand-blue) 0%, var(--ember-500) 60%, transparent 100%);
+      z-index: 3;
+    }}
+    aside, main {{ position: relative; z-index: 1; }}
+    aside {{
+      border-right: 1px solid var(--line);
+      background: rgba(244, 242, 238, 0.78);
+      padding: 28px;
+      overflow: auto;
+    }}
+    main {{ padding: 28px; overflow: auto; }}
+    h1 {{
+      font-family: "Instrument Serif", Georgia, serif;
+      font-size: 34px;
+      font-weight: 400;
+      line-height: 1;
+      margin: 0 0 6px;
+      color: var(--brand-blue);
+      letter-spacing: 0;
+    }}
+    h2 {{
+      font-family: "Instrument Serif", Georgia, serif;
+      font-size: 26px;
+      font-weight: 400;
+      line-height: 1.15;
+      margin: 0 0 14px;
+      color: var(--brand-blue);
+    }}
+    h3 {{
+      font-family: "Sora", sans-serif;
+      font-size: 13px;
+      font-weight: 700;
+      margin: 18px 0 8px;
+      color: var(--ink-soft);
+    }}
     p {{ margin: 0; }}
-    .muted {{ color: var(--muted); font-size: 13px; }}
-    .brand {{ display: flex; gap: 12px; align-items: center; margin-bottom: 14px; }}
-    .brand-logo {{ width: 58px; height: 58px; border-radius: var(--radius); object-fit: cover; background: #000; flex: 0 0 auto; }}
+    .muted {{ color: var(--stone); font-size: 13px; line-height: 1.45; }}
+    .brand {{ display: flex; gap: 14px; align-items: center; margin-bottom: 18px; }}
+    .brand-logo {{
+      width: 62px;
+      height: 62px;
+      border-radius: var(--radius-ui);
+      object-fit: cover;
+      background: #000;
+      flex: 0 0 auto;
+      box-shadow: 0 10px 24px rgba(14, 15, 18, 0.16);
+    }}
     .brand h1 {{ margin: 0 0 4px; }}
-    .credit {{ border-top: 1px solid var(--line); margin-top: 18px; padding-top: 14px; display: grid; gap: 3px; font-size: 12px; color: var(--muted); }}
-    .credit strong {{ color: var(--ink); font-size: 13px; }}
-    .credit a {{ color: var(--accent); text-decoration: none; }}
+    .credit {{
+      border-top: 1px solid var(--line);
+      margin-top: 20px;
+      padding-top: 16px;
+      display: grid;
+      gap: 4px;
+      font-size: 12px;
+      color: var(--stone);
+    }}
+    .credit strong {{
+      color: var(--brand-blue);
+      font-size: 13px;
+      font-weight: 700;
+    }}
+    .credit a {{ color: var(--brand-blue); text-decoration: none; }}
     .credit a:hover {{ text-decoration: underline; }}
     .stack {{ display: grid; gap: 12px; }}
-    .stats {{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 16px 0; }}
-    .stat {{ background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px; }}
-    .stat b {{ display: block; font-size: 20px; }}
-    label {{ display: grid; gap: 6px; font-size: 12px; color: var(--muted); }}
-    input, select {{ width: 100%; border: 1px solid var(--line); border-radius: 6px; padding: 9px; background: #fff; color: var(--ink); }}
-    .tabs {{ display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }}
-    button {{ border: 1px solid var(--line); background: #fff; color: var(--ink); border-radius: 6px; padding: 9px 12px; cursor: pointer; }}
-    button.active {{ border-color: var(--accent); background: var(--soft); color: #0f513c; }}
-    .grid {{ display: grid; grid-template-columns: minmax(320px, 460px) minmax(0, 1fr); gap: 16px; align-items: start; }}
-    .list {{ display: grid; gap: 8px; }}
-    .row {{ border: 1px solid var(--line); background: var(--panel); border-radius: var(--radius); padding: 12px; cursor: pointer; }}
-    .row:hover, .row.selected {{ border-color: var(--accent); box-shadow: 0 0 0 2px rgba(31, 122, 92, .12); }}
-    .row-title {{ display: flex; justify-content: space-between; gap: 12px; font-weight: 650; }}
-    .score {{ color: var(--accent); font-weight: 700; }}
+    .stats {{
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin: 20px 0;
+    }}
+    .stat {{
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-card);
+      padding: 12px;
+    }}
+    .stat b {{
+      display: block;
+      margin-top: 3px;
+      font-family: "Sora", sans-serif;
+      font-size: 21px;
+      color: var(--ink-soft);
+    }}
+    label {{
+      display: grid;
+      gap: 7px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--stone);
+    }}
+    input, select {{
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-ui);
+      padding: 10px 11px;
+      background: rgba(255, 255, 255, 0.78);
+      color: var(--ink);
+      font: inherit;
+      letter-spacing: 0;
+      text-transform: none;
+      outline: none;
+    }}
+    input:focus, select:focus {{
+      border-color: var(--ember-500);
+      box-shadow: 0 0 0 3px rgba(237, 94, 10, 0.12);
+    }}
+    .tabs {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 20px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--line);
+    }}
+    button {{
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.72);
+      color: var(--ink-soft);
+      border-radius: var(--radius-ui);
+      padding: 10px 13px;
+      cursor: pointer;
+      font-family: "Sora", sans-serif;
+      font-size: 12px;
+      font-weight: 600;
+    }}
+    button:hover {{ border-color: rgba(237, 94, 10, 0.42); }}
+    button.active {{
+      border-color: rgba(237, 94, 10, 0.35);
+      background: var(--warm-mist);
+      color: var(--ember-500);
+    }}
+    .grid {{
+      display: grid;
+      grid-template-columns: minmax(320px, 460px) minmax(0, 1fr);
+      gap: 18px;
+      align-items: start;
+    }}
+    .list {{ display: grid; gap: 10px; }}
+    .row {{
+      border: 1px solid var(--line);
+      background: var(--panel);
+      border-radius: var(--radius-card);
+      padding: 14px;
+      cursor: pointer;
+      transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+    }}
+    .row:hover, .row.selected {{
+      border-color: rgba(237, 94, 10, 0.45);
+      box-shadow: 0 12px 26px rgba(14, 15, 18, 0.08);
+    }}
+    .row:hover {{ transform: translateY(-1px); }}
+    .row.selected {{ background: rgba(251, 230, 214, 0.34); }}
+    .row-title {{
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      font-weight: 700;
+      color: var(--ink-soft);
+    }}
+    .score {{
+      color: var(--ember-500);
+      font-family: "Sora", sans-serif;
+      font-weight: 700;
+    }}
     .pillbar {{ display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }}
-    .pill {{ border: 1px solid var(--line); border-radius: 999px; padding: 3px 8px; background: #f8faf7; font-size: 12px; color: var(--muted); }}
-    .detail, .panel {{ border: 1px solid var(--line); background: var(--panel); border-radius: var(--radius); padding: 16px; }}
-    .content {{ white-space: pre-wrap; line-height: 1.55; font-size: 14px; }}
-    .meta {{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 12px 0; }}
-    .meta div {{ border: 1px solid var(--line); border-radius: 6px; padding: 8px; font-size: 12px; }}
-    table {{ width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }}
-    th, td {{ border-bottom: 1px solid var(--line); padding: 10px; text-align: left; vertical-align: top; font-size: 13px; }}
-    th {{ background: #eef1ea; font-size: 12px; color: var(--muted); }}
+    .pill {{
+      border: 1px solid rgba(15, 71, 97, 0.14);
+      border-radius: 999px;
+      padding: 4px 9px;
+      background: rgba(255, 255, 255, 0.62);
+      font-size: 12px;
+      color: var(--stone);
+    }}
+    .detail, .panel {{
+      border: 1px solid var(--line);
+      background: var(--panel);
+      border-radius: var(--radius-card);
+      padding: 18px;
+      box-shadow: 0 12px 32px rgba(14, 15, 18, 0.05);
+    }}
+    .content {{
+      white-space: pre-wrap;
+      line-height: 1.62;
+      font-size: 14px;
+      color: var(--graphite);
+    }}
+    .meta {{
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin: 12px 0;
+    }}
+    .meta div {{
+      border: 1px solid var(--line);
+      border-radius: var(--radius-ui);
+      padding: 10px;
+      font-size: 12px;
+      color: var(--graphite);
+      background: rgba(255, 255, 255, 0.48);
+    }}
+    .meta b {{ color: var(--brand-blue); }}
+    table {{
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      background: rgba(255, 255, 255, 0.56);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-ui);
+      overflow: hidden;
+    }}
+    th, td {{
+      border-bottom: 1px solid var(--line);
+      padding: 11px;
+      text-align: left;
+      vertical-align: top;
+      font-size: 13px;
+      color: var(--graphite);
+    }}
+    th {{
+      background: var(--fog);
+      font-family: "Sora", sans-serif;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--brand-blue);
+    }}
     tr:last-child td {{ border-bottom: 0; }}
     .graph {{ display: grid; gap: 10px; }}
     .edge {{ display: grid; grid-template-columns: minmax(0, 1fr) 32px minmax(0, 1fr); gap: 8px; align-items: center; }}
-    .node {{ background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 8px; min-height: 40px; }}
-    .arrow {{ text-align: center; color: var(--accent); font-weight: 700; }}
-    pre {{ white-space: pre-wrap; word-break: break-word; background: #f8faf7; border: 1px solid var(--line); border-radius: 6px; padding: 10px; }}
+    .node {{
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-ui);
+      padding: 10px;
+      min-height: 40px;
+    }}
+    .arrow {{
+      text-align: center;
+      color: var(--ember-500);
+      font-family: "Sora", sans-serif;
+      font-weight: 700;
+    }}
+    pre {{
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: rgba(244, 242, 238, 0.78);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-ui);
+      padding: 10px;
+    }}
     .hidden {{ display: none; }}
     @media (max-width: 900px) {{
+      .app {{
+        width: 100%;
+        min-height: 100vh;
+        margin: 0;
+        border: 0;
+      }}
       .app {{ grid-template-columns: 1fr; }}
       aside {{ border-right: 0; border-bottom: 1px solid var(--line); }}
       .grid, .meta {{ grid-template-columns: 1fr; }}
@@ -249,7 +501,7 @@ def render_viewer_html(data: dict[str, Any]) -> str:
       <img id="brandLogo" class="brand-logo" alt="Sincron IA">
       <div>
         <h1>Sincron Brain</h1>
-        <p class="muted">Memory debug viewer</p>
+        <p class="muted">Visualizador de memórias</p>
       </div>
     </div>
     <p class="muted" id="vaultPath"></p>
