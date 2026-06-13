@@ -1,7 +1,8 @@
-"""CLI: init / serve / sleep-now / stats."""
+"""CLI: init / connect / serve / sleep-now / stats."""
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 from typing import Annotated
@@ -32,26 +33,11 @@ def _default_vault_path() -> Path:
     return Path(user_data_dir("sincron-brain", "sincron")) / "memory"
 
 
-@app.command()
-def init(
-    path: Annotated[
-        Path | None, typer.Option("--path", help="Vault directory. Default: user data dir.")
-    ] = None,
-    provider: Annotated[
-        str | None, typer.Option("--provider", help="LLM judge provider (anthropic, openai, ...).")
-    ] = None,
-    yes: Annotated[
-        bool, typer.Option("--yes", "-y", help="Skip prompts, use defaults.")
-    ] = False,
-) -> None:
-    """Create a new memory vault."""
-    vault_path = path or _default_vault_path()
-    vault_path = vault_path.expanduser().resolve()
-
-    if (vault_path / "_config.toml").exists():
-        console.print(f"[yellow]Vault already exists at {vault_path}[/]")
-        raise typer.Exit(1)
-
+def _create_vault(
+    vault_path: Path,
+    provider: str | None,
+    yes: bool,
+) -> VaultConfig:
     console.print(f"[bold]Creating vault at:[/] {vault_path}")
 
     chosen_provider = provider or ("anthropic" if yes else _prompt_provider())
@@ -76,25 +62,82 @@ def init(
     with storage.open_db(config):
         pass
     config.save()
+    return config
+
+
+@app.command()
+def init(
+    path: Annotated[
+        Path | None, typer.Option("--path", help="Vault directory. Default: user data dir.")
+    ] = None,
+    provider: Annotated[
+        str | None, typer.Option("--provider", help="LLM judge provider (anthropic, openai, ...).")
+    ] = None,
+    yes: Annotated[
+        bool, typer.Option("--yes", "-y", help="Skip prompts, use defaults.")
+    ] = False,
+) -> None:
+    """Create a new memory vault."""
+    vault_path = path or _default_vault_path()
+    vault_path = vault_path.expanduser().resolve()
+
+    if (vault_path / "_config.toml").exists():
+        console.print(f"[yellow]Vault already exists at {vault_path}[/]")
+        raise typer.Exit(1)
+
+    config = _create_vault(vault_path, provider, yes)
 
     console.print("[green]Vault created.[/]")
     console.print(f"  Config: {config.config_file}")
     console.print(f"  Index:  {config.index_db}")
-    console.print(f"  Judge:  {chosen_provider} / {model}")
+    console.print(f"  Judge:  {config.judge.provider} / {config.judge.model}")
     console.print()
-    console.print("[bold]Add to your MCP client config:[/]")
-    console.print(
-        f'  "sincron-brain": {{\n'
-        f'    "command": "sincron-brain",\n'
-        f'    "args": ["serve"],\n'
-        f'    "env": {{ "SINCRON_BRAIN_VAULT": "{vault_path}" }}\n'
-        f"  }}"
-    )
+    console.print("[bold]Connect a project to this vault:[/]")
+    console.print(f'  sincron-brain connect --path "{vault_path}"')
+
+
+@app.command()
+def connect(
+    path: Annotated[
+        Path | None, typer.Option("--path", help="Vault directory. Default: user data dir.")
+    ] = None,
+    project: Annotated[
+        Path, typer.Option("--project", help="Project directory where .mcp.json will be written.")
+    ] = Path("."),
+    provider: Annotated[
+        str | None, typer.Option("--provider", help="LLM judge provider if a vault is created.")
+    ] = None,
+    yes: Annotated[
+        bool, typer.Option("--yes", "-y", help="Skip prompts, use defaults if a vault is created.")
+    ] = True,
+) -> None:
+    """Create/use a vault and write .mcp.json for the current project."""
+    vault_path = path or _default_vault_path()
+    vault_path = vault_path.expanduser().resolve()
+    project_path = project.expanduser().resolve()
+
+    if not project_path.exists():
+        console.print(f"[red]Project directory not found:[/] {project_path}")
+        raise typer.Exit(1)
+
+    if (vault_path / "_config.toml").exists():
+        config = load_config(vault_path)
+        console.print(f"[green]Using existing vault:[/] {config.vault_path}")
+    else:
+        config = _create_vault(vault_path, provider, yes)
+        console.print("[green]Vault created.[/]")
+
+    mcp_file = _write_project_mcp_config(project_path, config)
+    console.print(f"[green]MCP config written:[/] {mcp_file}")
+    console.print()
+    console.print("[bold]Next steps:[/]")
+    console.print("  1. Restart your MCP client/agent.")
+    console.print("  2. Run: sincron-brain stats")
 
 
 @app.command()
 def serve() -> None:
-    """Run the MCP server (stdio). Used by MCP clients via uvx/python -m."""
+    """Run the MCP server (stdio). Used by MCP clients."""
     from sincron_brain.server import main
 
     main()
@@ -135,12 +178,76 @@ def stats() -> None:
 
 
 def _load_or_die() -> VaultConfig:
-    vault = Path(os.environ.get("SINCRON_BRAIN_VAULT", _default_vault_path()))
+    vault_value = (
+        os.environ.get("SINCRON_BRAIN_VAULT")
+        or _vault_path_from_project_mcp_config(Path.cwd())
+        or str(_default_vault_path())
+    )
+    vault = Path(vault_value)
     try:
         return load_config(vault.expanduser().resolve())
     except FileNotFoundError as e:
         console.print(f"[red]{e}[/]")
         raise typer.Exit(1) from None
+
+
+def _mcp_server_payload(config: VaultConfig) -> dict:
+    return {
+        "command": "sincron-brain",
+        "args": ["serve"],
+        "env": {
+            "SINCRON_BRAIN_VAULT": str(config.vault_path),
+        },
+    }
+
+
+def _write_project_mcp_config(project_path: Path, config: VaultConfig) -> Path:
+    mcp_file = project_path / ".mcp.json"
+    if mcp_file.exists():
+        try:
+            payload = json.loads(mcp_file.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as e:
+            console.print(f"[red]Invalid JSON at {mcp_file}: {e}[/]")
+            raise typer.Exit(1) from None
+        if not isinstance(payload, dict):
+            console.print(f"[red]{mcp_file} must contain a JSON object.[/]")
+            raise typer.Exit(1)
+    else:
+        payload = {}
+
+    mcp_servers = payload.setdefault("mcpServers", {})
+    if not isinstance(mcp_servers, dict):
+        console.print(f"[red]{mcp_file} has an invalid mcpServers value.[/]")
+        raise typer.Exit(1)
+
+    mcp_servers["sincron-brain"] = _mcp_server_payload(config)
+    mcp_file.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return mcp_file
+
+
+def _vault_path_from_project_mcp_config(project_path: Path) -> str | None:
+    mcp_file = project_path / ".mcp.json"
+    if not mcp_file.exists():
+        return None
+
+    try:
+        payload = json.loads(mcp_file.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None
+
+    if not isinstance(payload, dict):
+        return None
+
+    server = payload.get("mcpServers", {}).get("sincron-brain")
+    if not isinstance(server, dict):
+        return None
+
+    env = server.get("env")
+    if not isinstance(env, dict):
+        return None
+
+    vault_path = env.get("SINCRON_BRAIN_VAULT")
+    return vault_path if isinstance(vault_path, str) and vault_path else None
 
 
 def _prompt_provider() -> str:

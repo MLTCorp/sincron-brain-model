@@ -41,8 +41,11 @@ Set-ExecutionPolicy -Scope Process Bypass -Force; & "C:\Projetos\GitHub-Clones\s
 ## Quick start
 
 ```powershell
-# Create a vault. Prompts for provider unless --yes is set.
-sincron-brain init
+# Inside the project that should use memory:
+cd C:\Temp\teste_brain
+
+# Create/use the vault and generate .mcp.json for this project.
+sincron-brain connect --path .\memory
 
 # Export the API key for your judge provider (matches the prompt choice)
 $env:ANTHROPIC_API_KEY = "sk-ant-..."
@@ -54,12 +57,21 @@ sincron-brain stats
 sincron-brain sleep-now
 ```
 
-For a live test vault:
+`connect` is the recommended plug-and-play path. It creates the vault if needed
+and writes a project-level `.mcp.json` like this:
 
-```powershell
-sincron-brain init --path C:\Temp\teste_brain\memory --yes
-$env:SINCRON_BRAIN_VAULT = "C:\Temp\teste_brain\memory"
-sincron-brain stats
+```json
+{
+  "mcpServers": {
+    "sincron-brain": {
+      "command": "sincron-brain",
+      "args": ["serve"],
+      "env": {
+        "SINCRON_BRAIN_VAULT": "C:\\Temp\\teste_brain\\memory"
+      }
+    }
+  }
+}
 ```
 
 ## Development
@@ -82,7 +94,17 @@ use the Store alias directly:
 
 ## MCP client configuration
 
-Add to your MCP client config (Claude Desktop / Claude Code / Cursor / etc.):
+The simplest path is to run this inside the project:
+
+```powershell
+sincron-brain connect --path .\memory
+```
+
+That writes `.mcp.json` for MCP clients that read project-level config. Restart
+your MCP client/agent after running it.
+
+If your MCP client does not read `.mcp.json`, copy the generated server block
+into that client's MCP settings:
 
 ```json
 {
