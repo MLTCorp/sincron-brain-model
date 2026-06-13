@@ -28,12 +28,17 @@ def test_connect_creates_vault_and_project_mcp_config(tmp_path):
         "args": ["serve"],
         "env": {"SINCRON_BRAIN_VAULT": str(vault.resolve())},
     }
+    settings = json.loads(
+        (project / ".claude" / "settings.local.json").read_text(encoding="utf-8")
+    )
+    assert settings["enabledMcpjsonServers"] == ["sincron-brain"]
 
 
-def test_connect_preserves_existing_mcp_servers(tmp_path):
+def test_connect_preserves_existing_mcp_servers_and_syncs_claude_settings(tmp_path):
     project = tmp_path / "project"
     vault = tmp_path / "memory"
     project.mkdir()
+    (project / ".claude").mkdir()
     (project / ".mcp.json").write_text(
         json.dumps(
             {
@@ -43,6 +48,15 @@ def test_connect_preserves_existing_mcp_servers(tmp_path):
                         "args": ["serve"],
                     }
                 }
+            }
+        ),
+        encoding="utf-8",
+    )
+    (project / ".claude" / "settings.local.json").write_text(
+        json.dumps(
+            {
+                "someOtherSetting": True,
+                "enabledMcpjsonServers": ["google-news-trends", "other"],
             }
         ),
         encoding="utf-8",
@@ -57,6 +71,11 @@ def test_connect_preserves_existing_mcp_servers(tmp_path):
     payload = json.loads((project / ".mcp.json").read_text(encoding="utf-8"))
     assert payload["mcpServers"]["other"]["command"] == "other-tool"
     assert payload["mcpServers"]["sincron-brain"]["command"] == "sincron-brain"
+    settings = json.loads(
+        (project / ".claude" / "settings.local.json").read_text(encoding="utf-8")
+    )
+    assert settings["someOtherSetting"] is True
+    assert settings["enabledMcpjsonServers"] == ["other", "sincron-brain"]
 
 
 def test_stats_uses_local_project_mcp_config(tmp_path, monkeypatch):

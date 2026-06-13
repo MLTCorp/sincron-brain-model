@@ -128,7 +128,9 @@ def connect(
         console.print("[green]Vault created.[/]")
 
     mcp_file = _write_project_mcp_config(project_path, config)
+    claude_settings = _sync_claude_project_settings(project_path)
     console.print(f"[green]MCP config written:[/] {mcp_file}")
+    console.print(f"[green]Claude project settings synced:[/] {claude_settings}")
     console.print()
     console.print("[bold]Next steps:[/]")
     console.print("  1. Restart your MCP client/agent.")
@@ -223,6 +225,47 @@ def _write_project_mcp_config(project_path: Path, config: VaultConfig) -> Path:
     mcp_servers["sincron-brain"] = _mcp_server_payload(config)
     mcp_file.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return mcp_file
+
+
+def _sync_claude_project_settings(project_path: Path) -> Path:
+    """Enable project .mcp.json servers that exist, avoiding dangling Claude entries."""
+    mcp_file = project_path / ".mcp.json"
+    payload = json.loads(mcp_file.read_text(encoding="utf-8"))
+    valid_servers = set(payload.get("mcpServers", {}).keys())
+
+    claude_dir = project_path / ".claude"
+    claude_dir.mkdir(exist_ok=True)
+    settings_file = claude_dir / "settings.local.json"
+
+    if settings_file.exists():
+        try:
+            settings = json.loads(settings_file.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as e:
+            console.print(f"[red]Invalid JSON at {settings_file}: {e}[/]")
+            raise typer.Exit(1) from None
+        if not isinstance(settings, dict):
+            console.print(f"[red]{settings_file} must contain a JSON object.[/]")
+            raise typer.Exit(1)
+    else:
+        settings = {}
+
+    enabled = settings.get("enabledMcpjsonServers", [])
+    if not isinstance(enabled, list):
+        enabled = []
+
+    synced = []
+    for name in enabled:
+        if isinstance(name, str) and name in valid_servers and name not in synced:
+            synced.append(name)
+    if "sincron-brain" in valid_servers and "sincron-brain" not in synced:
+        synced.append("sincron-brain")
+
+    settings["enabledMcpjsonServers"] = synced
+    settings_file.write_text(
+        json.dumps(settings, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    return settings_file
 
 
 def _vault_path_from_project_mcp_config(project_path: Path) -> str | None:
