@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 from base64 import b64encode
-from collections import Counter
 from datetime import UTC, datetime
 from importlib import resources
 from pathlib import Path
@@ -17,29 +16,50 @@ VIEWER_FILENAME = "_viewer.html"
 LOGO_RESOURCE = "assets/logo-sincronia.jpg"
 
 
-def write_viewer(config: VaultConfig, output: Path | None = None) -> Path:
+def write_viewer(
+    config: VaultConfig,
+    output: Path | None = None,
+    limit: int | None = None,
+    summary_only: bool = False,
+) -> Path:
     """Write a self-contained HTML snapshot for debugging a vault."""
     output_path = (output or config.vault_path / VIEWER_FILENAME).expanduser().resolve()
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(render_viewer_html(build_viewer_data(config)), encoding="utf-8")
+    output_path.write_text(
+        render_viewer_html(
+            build_viewer_data(config, limit=limit, summary_only=summary_only)
+        ),
+        encoding="utf-8",
+    )
     return output_path
 
 
-def build_viewer_data(config: VaultConfig) -> dict[str, Any]:
+def build_viewer_data(
+    config: VaultConfig,
+    limit: int | None = None,
+    summary_only: bool = False,
+) -> dict[str, Any]:
     """Collect memories, tags, go_deeper edges, queues, and audit-derived sleeps."""
+    if limit is not None and limit <= 0:
+        raise ValueError("limit must be greater than 0")
+
     with storage.open_db(config) as conn:
         stats = storage.stats(conn)
-        rows = conn.execute(
-            """
+        sql = """
             SELECT id, major_tags, tags, score, created, last_accessed, last_scored,
                    access_count, emotion_floor, source_type, asset_ref, go_deeper,
                    synopsis, file_path
             FROM memories
             ORDER BY score DESC, last_accessed DESC
             """
-        ).fetchall()
+        params: tuple[int, ...] = ()
+        if limit is not None:
+            sql += " LIMIT ?"
+            params = (limit,)
+        rows = conn.execute(sql, params).fetchall()
         memories = []
         for row in rows:
+            content = "" if summary_only else _read_markdown_body(config.vault_path / row["file_path"])
             memories.append(
                 {
                     "id": row["id"],
@@ -52,7 +72,8 @@ def build_viewer_data(config: VaultConfig) -> dict[str, Any]:
                     "asset_ref": row["asset_ref"],
                     "go_deeper": json.loads(row["go_deeper"]),
                     "synopsis": row["synopsis"],
-                    "content": _read_markdown_body(config.vault_path / row["file_path"]),
+                    "content": content,
+                    "content_omitted": summary_only,
                     "created": row["created"],
                     "last_accessed": row["last_accessed"],
                     "last_scored": row["last_scored"],
@@ -60,9 +81,9 @@ def build_viewer_data(config: VaultConfig) -> dict[str, Any]:
                 }
             )
         major_tags = storage.list_major_tags(conn)
+        common_tags = storage.list_common_tags(conn)
 
     audit = storage.read_audit(config)
-    tag_counts = Counter(tag for memory in memories for tag in memory["tags"])
     edges = [
         {"from": memory["id"], "to": target}
         for memory in memories
@@ -80,6 +101,13 @@ def build_viewer_data(config: VaultConfig) -> dict[str, Any]:
     return {
         "generated_at": datetime.now(UTC).isoformat(),
         "vault_path": str(config.vault_path),
+        "viewer": {
+            "memory_limit": limit,
+            "summary_only": summary_only,
+            "displayed_memories": len(memories),
+            "total_memories": stats.get("total", len(memories)),
+            "omitted_memories": max(0, stats.get("total", len(memories)) - len(memories)),
+        },
         "config": {
             "locale": config.locale,
             "judge_provider": config.judge.provider,
@@ -97,7 +125,7 @@ def build_viewer_data(config: VaultConfig) -> dict[str, Any]:
         },
         "stats": stats,
         "major_tags": major_tags,
-        "tags": [{"tag": tag, "count": count} for tag, count in tag_counts.most_common()],
+        "tags": common_tags,
         "memories": memories,
         "go_deeper_edges": edges,
         "sleeps": _sleep_runs(audit),
@@ -326,6 +354,17 @@ def render_viewer_html(data: dict[str, Any]) -> str:
     .credit a {{ color: var(--brand-blue); text-decoration: none; }}
     .credit a:hover {{ text-decoration: underline; }}
     .stack {{ display: grid; gap: 12px; }}
+    .notice {{
+      display: none;
+      margin: 14px 0 0;
+      padding: 10px 12px;
+      border: 1px solid rgba(237, 94, 10, 0.28);
+      border-radius: var(--radius-ui);
+      background: rgba(251, 230, 214, 0.48);
+      color: var(--graphite);
+      font-size: 12px;
+      line-height: 1.45;
+    }}
     .stats {{
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -538,6 +577,7 @@ def render_viewer_html(data: dict[str, Any]) -> str:
       </div>
     </div>
     <p class="muted" id="vaultPath"></p>
+    <p class="notice" id="viewerMode"></p>
     <div class="stats" id="stats"></div>
     <div class="stack">
       <label>Busca <input id="search" type="search" placeholder="id, conteúdo, sinopse, tag"></label>
@@ -581,6 +621,16 @@ function init() {{
   if (branding.logo_data_uri) logo.src = branding.logo_data_uri;
   else logo.classList.add('hidden');
   document.getElementById('vaultPath').textContent = DATA.vault_path;
+  const viewer = DATA.viewer || {{}};
+  const viewerMode = document.getElementById('viewerMode');
+  const modeBits = [];
+  if (viewer.memory_limit) modeBits.push(`Snapshot limitado a ${{viewer.displayed_memories}} de ${{viewer.total_memories}} memórias.`);
+  if (viewer.omitted_memories > 0) modeBits.push(`${{viewer.omitted_memories}} memórias omitidas do HTML.`);
+  if (viewer.summary_only) modeBits.push('Corpos das memórias omitidos no modo resumo.');
+  if (modeBits.length) {{
+    viewerMode.textContent = modeBits.join(' ');
+    viewerMode.style.display = 'block';
+  }}
   document.getElementById('stats').innerHTML = [
     ['Memórias', DATA.stats.total],
     ['Major tags', DATA.major_tags.length],
@@ -631,6 +681,7 @@ function selectMemory(id) {{ selectedId = id; renderMemories(); }}
 function renderMemoryDetail(m) {{
   if (!m) return '<div class="detail">Selecione uma memória.</div>';
   const go = (m.go_deeper || []).map(id => `<span class="pill">${{esc(id)}}</span>`).join('') || '<span class="muted">Sem links</span>';
+  const content = m.content_omitted ? '<span class="muted">Conteúdo omitido neste snapshot. Gere novamente sem --summary-only para incluir os corpos das memórias.</span>' : esc(m.content);
   return `<div class="detail">
     <h2>${{esc(m.synopsis || m.id)}}</h2>
     <div class="meta">
@@ -644,7 +695,7 @@ function renderMemoryDetail(m) {{
     <h3>Major tags</h3><div class="pillbar">${{m.major_tags.map(t => `<span class="pill">${{esc(t)}}</span>`).join('')}}</div>
     <h3>Tags</h3><div class="pillbar">${{(m.tags || []).map(t => `<span class="pill">${{esc(t)}}</span>`).join('') || '<span class="muted">Sem tags comuns</span>'}}</div>
     <h3>Go deeper</h3><div class="pillbar">${{go}}</div>
-    <h3>Conteúdo</h3><div class="content">${{esc(m.content)}}</div>
+    <h3>Conteúdo</h3><div class="content">${{content}}</div>
   </div>`;
 }}
 function renderTags() {{

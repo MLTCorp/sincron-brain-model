@@ -189,14 +189,30 @@ def viewer(
         Path | None,
         typer.Option("--output", "-o", help="HTML output path. Default: <vault>/_viewer.html."),
     ] = None,
+    limit: Annotated[
+        int | None,
+        typer.Option("--limit", help="Maximum number of memories embedded in the HTML."),
+    ] = None,
+    summary_only: Annotated[
+        bool,
+        typer.Option("--summary-only", help="Omit full memory bodies from the HTML snapshot."),
+    ] = False,
 ) -> None:
     """Generate a static HTML debug viewer for the current vault."""
     from sincron_brain.viewer import write_viewer
 
     config = _load_or_die()
-    output_path = write_viewer(config, output)
+    try:
+        output_path = write_viewer(config, output, limit=limit, summary_only=summary_only)
+    except ValueError as e:
+        console.print(f"[red]{e}[/]")
+        raise typer.Exit(1) from None
     console.print("[green]Viewer generated.[/]")
     console.print(f"  {output_path}")
+    if limit:
+        console.print(f"  Limit: {limit} memories")
+    if summary_only:
+        console.print("  Summary-only: memory bodies omitted")
 
 
 @app.command()

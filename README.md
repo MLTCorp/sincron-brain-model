@@ -163,6 +163,24 @@ Open that file in a browser to inspect memories, sleeps, audit events, queues,
 Major Tags, tags, scores, emotional floors, and `go_deeper` links. The viewer is
 a snapshot for debugging; it is not required for the MCP server to work.
 
+For large vaults, generate lighter snapshots:
+
+```powershell
+# Embed only the top 1000 memories by score/recency.
+sincron-brain viewer --limit 1000
+
+# Keep memory cards and diagnostics, but omit full memory bodies.
+sincron-brain viewer --summary-only
+
+# Combine both for very large vaults.
+sincron-brain viewer --limit 1000 --summary-only
+```
+
+The full vault statistics, Major Tag totals, common tag totals, queues, sleeps,
+and recent audit events remain visible. `--limit` only controls how many memory
+cards are embedded in the HTML; `--summary-only` controls whether full memory
+bodies are embedded.
+
 ## Local benchmark
 
 Use the benchmark command to create a synthetic vault and measure core local

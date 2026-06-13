@@ -88,6 +88,53 @@ def test_write_viewer_outputs_self_contained_html(tmp_path):
     assert "Conteúdo" in html
 
 
+def test_build_viewer_data_can_limit_embedded_memories(tmp_path):
+    config = make_config(tmp_path)
+    with storage.open_db(config) as conn:
+        storage.write_memory(
+            config,
+            Memory(id="top", major_tags=["debug"], score=90, synopsis="Top", content="Top body"),
+            conn,
+        )
+        storage.write_memory(
+            config,
+            Memory(
+                id="hidden",
+                major_tags=["debug"],
+                tags=["hidden_tag"],
+                score=10,
+                synopsis="Hidden",
+                content="Hidden body",
+            ),
+            conn,
+        )
+
+    data = build_viewer_data(config, limit=1)
+
+    assert data["stats"]["total"] == 2
+    assert data["viewer"]["displayed_memories"] == 1
+    assert data["viewer"]["omitted_memories"] == 1
+    assert [memory["id"] for memory in data["memories"]] == ["top"]
+    assert any(tag["tag"] == "hidden_tag" for tag in data["tags"])
+
+
+def test_write_viewer_summary_only_omits_memory_bodies(tmp_path):
+    config = make_config(tmp_path)
+    with storage.open_db(config) as conn:
+        storage.write_memory(
+            config,
+            Memory(id="a", major_tags=["debug"], synopsis="Debug", content="Secret body"),
+            conn,
+        )
+
+    path = write_viewer(config, limit=1, summary_only=True)
+    html = path.read_text(encoding="utf-8")
+
+    assert "Secret body" not in html
+    assert "Corpos das memórias omitidos" in html
+    assert '"summary_only": true' in html
+
+
 def test_render_viewer_escapes_script_end_tag():
     html = render_viewer_html(
         {
