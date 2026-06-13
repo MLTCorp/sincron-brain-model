@@ -199,6 +199,91 @@ def viewer(
     console.print(f"  {output_path}")
 
 
+@app.command()
+def benchmark(
+    path: Annotated[
+        Path,
+        typer.Option("--path", help="Benchmark vault directory to create."),
+    ],
+    memories: Annotated[
+        int,
+        typer.Option("--memories", help="Synthetic memories to write directly."),
+    ] = 1000,
+    drafts: Annotated[
+        int,
+        typer.Option("--drafts", help="Synthetic drafts to enqueue before sleep."),
+    ] = 0,
+    force: Annotated[
+        bool,
+        typer.Option("--force", help="Replace the benchmark vault if it already exists."),
+    ] = False,
+    skip_viewer: Annotated[
+        bool,
+        typer.Option("--skip-viewer", help="Skip static viewer generation."),
+    ] = False,
+    skip_sleep: Annotated[
+        bool,
+        typer.Option("--skip-sleep", help="Do not process queued drafts with sleep."),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Print benchmark result as JSON."),
+    ] = False,
+) -> None:
+    """Run a local synthetic stress test without calling an LLM provider."""
+    from sincron_brain.benchmark import run_benchmark
+
+    try:
+        result = run_benchmark(
+            vault_path=path,
+            memories=memories,
+            drafts=drafts,
+            force=force,
+            render_viewer=not skip_viewer,
+            run_sleep_job=not skip_sleep,
+            progress=console.print,
+        )
+    except (FileExistsError, ValueError) as e:
+        console.print(f"[red]{e}[/]")
+        raise typer.Exit(1) from None
+
+    if json_output:
+        console.print_json(data=result)
+        return
+
+    console.print(f"[green]Benchmark complete.[/] Vault: {result['vault_path']}")
+    console.print(
+        f"  memories={result['requested_memories']} "
+        f"drafts={result['requested_drafts']} "
+        f"final_total={result['final_stats']['total']} "
+        f"storage={result['storage']['total_mb']} MB"
+    )
+    if result.get("viewer_path"):
+        console.print(f"  viewer={result['viewer_path']}")
+
+    table = Table(title="Benchmark timings")
+    table.add_column("step", style="cyan")
+    table.add_column("seconds", justify="right", style="bold")
+    table.add_column("result", overflow="fold")
+    for step in result["steps"]:
+        result_text = ""
+        if "result_count" in step:
+            result_text = f"{step['result_count']} rows"
+        elif "result" in step:
+            result_text = str(step["result"])
+        table.add_row(step["name"], f"{step['seconds']:.4f}", result_text)
+    console.print(table)
+
+    storage_table = Table(title="Benchmark storage", show_header=False)
+    storage_table.add_column("metric", style="cyan")
+    storage_table.add_column("value", style="bold")
+    for key, value in result["storage"].items():
+        storage_table.add_row(key, str(value))
+    storage_table.add_row("draft_queue", str(result["draft_queue"]))
+    storage_table.add_row("reactivation_queue", str(result["reactivation_queue"]))
+    console.print(storage_table)
+
+
 def _load_or_die() -> VaultConfig:
     vault_value = (
         os.environ.get("SINCRON_BRAIN_VAULT")

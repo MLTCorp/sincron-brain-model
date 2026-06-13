@@ -96,7 +96,7 @@ def reconcile_draft(
     conn, draft: DraftItem, config: VaultConfig, decide: Decider
 ) -> tuple[str, Memory]:
     """Process one draft. Returns (outcome, memory) where outcome is created|merged."""
-    candidates = find_candidates(conn, draft, config)
+    candidates = [] if decide is create_only else find_candidates(conn, draft, config)
     decision = decide(draft, candidates)
 
     if decision.action == "merge" and decision.target_id:

@@ -31,30 +31,31 @@ def build_viewer_data(config: VaultConfig) -> dict[str, Any]:
         stats = storage.stats(conn)
         rows = conn.execute(
             """
-            SELECT id, file_path
+            SELECT id, major_tags, tags, score, created, last_accessed, last_scored,
+                   access_count, emotion_floor, source_type, asset_ref, go_deeper,
+                   synopsis, file_path
             FROM memories
             ORDER BY score DESC, last_accessed DESC
             """
         ).fetchall()
         memories = []
         for row in rows:
-            memory = storage.read_memory_file(config.vault_path / row["file_path"])
             memories.append(
                 {
-                    "id": memory.id,
-                    "major_tags": memory.major_tags,
-                    "tags": memory.tags,
-                    "score": memory.score,
-                    "emotion_floor": memory.emotion_floor,
-                    "access_count": memory.access_count,
-                    "source_type": memory.source_type,
-                    "asset_ref": memory.asset_ref,
-                    "go_deeper": memory.go_deeper,
-                    "synopsis": memory.synopsis,
-                    "content": memory.content,
-                    "created": memory.created.isoformat(),
-                    "last_accessed": memory.last_accessed.isoformat(),
-                    "last_scored": memory.last_scored.isoformat(),
+                    "id": row["id"],
+                    "major_tags": json.loads(row["major_tags"]),
+                    "tags": json.loads(row["tags"]),
+                    "score": row["score"],
+                    "emotion_floor": row["emotion_floor"],
+                    "access_count": row["access_count"],
+                    "source_type": row["source_type"],
+                    "asset_ref": row["asset_ref"],
+                    "go_deeper": json.loads(row["go_deeper"]),
+                    "synopsis": row["synopsis"],
+                    "content": _read_markdown_body(config.vault_path / row["file_path"]),
+                    "created": row["created"],
+                    "last_accessed": row["last_accessed"],
+                    "last_scored": row["last_scored"],
                     "file_path": row["file_path"],
                 }
             )
@@ -111,6 +112,17 @@ def _logo_data_uri() -> str:
     except (FileNotFoundError, ModuleNotFoundError):
         return ""
     return "data:image/jpeg;base64," + b64encode(logo).decode("ascii")
+
+
+def _read_markdown_body(path: Path) -> str:
+    """Read only the markdown body; SQLite already has the indexed metadata."""
+    text = path.read_text(encoding="utf-8")
+    if not text.startswith("---"):
+        return text
+    parts = text.split("---", 2)
+    if len(parts) < 3:
+        return text
+    return parts[2].lstrip("\r\n")
 
 
 def _queue_items(directory: Path) -> list[dict[str, Any]]:

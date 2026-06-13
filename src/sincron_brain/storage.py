@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+import time
 import unicodedata
 import uuid
 from collections.abc import Iterable
@@ -56,6 +57,8 @@ def _utcnow_iso() -> str:
 
 
 SENSITIVE_KEYS = {"content", "api_key", "apikey", "token", "password", "secret"}
+AUDIT_PRUNE_INTERVAL_SECONDS = 60.0
+_AUDIT_LAST_PRUNED: dict[Path, float] = {}
 
 
 def write_audit(config: VaultConfig, event: str, **payload) -> Path | None:
@@ -63,7 +66,7 @@ def write_audit(config: VaultConfig, event: str, **payload) -> Path | None:
     if not config.audit.enabled:
         return None
     config.vault_path.mkdir(parents=True, exist_ok=True)
-    _prune_audit(config)
+    _prune_audit_if_due(config)
     row = {
         "ts": _utcnow_iso(),
         "event": event,
@@ -72,6 +75,17 @@ def write_audit(config: VaultConfig, event: str, **payload) -> Path | None:
     with config.audit_file.open("a", encoding="utf-8") as f:
         f.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
     return config.audit_file
+
+
+def _prune_audit_if_due(config: VaultConfig) -> None:
+    """Prune occasionally, not on every audit row during large sleep runs."""
+    audit_file = config.audit_file.resolve()
+    now = time.monotonic()
+    last = _AUDIT_LAST_PRUNED.get(audit_file)
+    if last is not None and now - last < AUDIT_PRUNE_INTERVAL_SECONDS:
+        return
+    _prune_audit(config)
+    _AUDIT_LAST_PRUNED[audit_file] = now
 
 
 def read_audit(config: VaultConfig) -> list[dict]:

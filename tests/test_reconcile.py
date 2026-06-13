@@ -59,6 +59,27 @@ def test_reconcile_create_writes_new_memory(tmp_path):
         assert mem.synopsis == "nova"
 
 
+def test_reconcile_create_only_skips_candidate_lookup(tmp_path, monkeypatch):
+    config = make_config(tmp_path)
+    draft = DraftItem(id="d", content="nova info", hint_tags=["trabalho"])
+
+    def fail_lookup(*_args, **_kwargs):
+        raise AssertionError("create_only should not need candidates")
+
+    monkeypatch.setattr(reconcile, "find_candidates", fail_lookup)
+
+    with storage.open_db(config) as conn:
+        outcome, mem = reconcile.reconcile_draft(
+            conn,
+            draft,
+            config,
+            reconcile.create_only,
+        )
+
+    assert outcome == "created"
+    assert mem.major_tags == ["trabalho"]
+
+
 def test_reconcile_uses_one_primary_major_tag_for_new_memory(tmp_path):
     config = make_config(tmp_path)
     draft = DraftItem(id="d", content="api key fica no .env")

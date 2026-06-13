@@ -163,6 +163,31 @@ Open that file in a browser to inspect memories, sleeps, audit events, queues,
 Major Tags, tags, scores, emotional floors, and `go_deeper` links. The viewer is
 a snapshot for debugging; it is not required for the MCP server to work.
 
+## Local benchmark
+
+Use the benchmark command to create a synthetic vault and measure core local
+operations without calling an LLM provider:
+
+```powershell
+sincron-brain benchmark --path C:\Temp\brain_benchmark_1k --memories 1000 --drafts 100 --force
+```
+
+It writes deterministic synthetic memories, optionally queues drafts and runs a
+local `sleep` pass with the create-only decider, then measures `stats`, Major Tag
+listing, common tag listing, tag navigation, FTS search, date listing, viewer
+generation, and vault size. Existing folders are never replaced unless
+`--force` is passed.
+
+Useful scale checks:
+
+```powershell
+sincron-brain benchmark --path C:\Temp\brain_benchmark_1k --memories 1000 --drafts 100 --force
+sincron-brain benchmark --path C:\Temp\brain_benchmark_10k --memories 10000 --drafts 500 --force
+sincron-brain benchmark --path C:\Temp\brain_benchmark_50k --memories 50000 --skip-viewer --force
+```
+
+Use `--json` when you want machine-readable timing output for comparison.
+
 ## Scoring model
 
 Scores stay in a 1-100 range. New memories start at `100`, temporal decay lowers stale memories by `1.5` points per day, and the global floor is `1`.
