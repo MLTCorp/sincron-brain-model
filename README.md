@@ -163,6 +163,10 @@ Open that file in a browser to inspect memories, sleeps, audit events, queues,
 Major Tags, tags, scores, emotional floors, and `go_deeper` links. The viewer is
 a snapshot for debugging; it is not required for the MCP server to work.
 
+The `Grafo` tab draws a local memory map: each node is a memory, `go_deeper`
+links are rendered as arrows, and the vertical position shows how close each
+memory is to the access surface (`score 100` at the top, lower scores deeper).
+
 For large vaults, generate lighter snapshots:
 
 ```powershell

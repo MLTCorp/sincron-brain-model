@@ -529,20 +529,113 @@ def render_viewer_html(data: dict[str, Any]) -> str:
       color: var(--brand-blue);
     }}
     tr:last-child td {{ border-bottom: 0; }}
-    .graph {{ display: grid; gap: 10px; }}
-    .edge {{ display: grid; grid-template-columns: minmax(0, 1fr) 32px minmax(0, 1fr); gap: 8px; align-items: center; }}
-    .node {{
-      background: var(--panel);
-      border: 1px solid var(--line);
-      border-radius: var(--radius-ui);
-      padding: 10px;
-      min-height: 40px;
+    .graph {{ display: grid; gap: 14px; }}
+    .graph-head {{
+      display: flex;
+      justify-content: space-between;
+      gap: 14px;
+      align-items: start;
     }}
-    .arrow {{
-      text-align: center;
-      color: var(--ember-500);
+    .graph-head p {{ max-width: 720px; }}
+    .graph-legend {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: flex-end;
+    }}
+    .legend-item {{
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 5px 9px;
+      background: rgba(255, 255, 255, 0.62);
+      color: var(--stone);
+      font-size: 12px;
+    }}
+    .legend-dot {{
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      background: var(--ember-500);
+      display: inline-block;
+    }}
+    .legend-dot.mid {{ background: var(--brand-blue); }}
+    .legend-dot.deep {{ background: var(--stone); }}
+    .graph-stage {{
+      position: relative;
+      width: 100%;
+      min-height: 680px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-card);
+      background:
+        linear-gradient(180deg, rgba(251, 230, 214, 0.56) 0%, rgba(255, 255, 255, 0.52) 36%, rgba(244, 242, 238, 0.78) 100%);
+      overflow: hidden;
+      box-shadow: 0 12px 32px rgba(14, 15, 18, 0.05);
+    }}
+    .surface-band {{
+      position: absolute;
+      left: 0;
+      right: 0;
+      border-top: 1px dashed rgba(110, 112, 121, 0.28);
+      color: rgba(59, 61, 66, 0.72);
       font-family: "Sora", sans-serif;
+      font-size: 10px;
       font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 5px 10px;
+      pointer-events: none;
+    }}
+    .graph-svg {{
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }}
+    .graph-edge {{
+      stroke: rgba(15, 71, 97, 0.28);
+      stroke-width: 1.4;
+      fill: none;
+    }}
+    .graph-node {{
+      position: absolute;
+      transform: translate(-50%, -50%);
+      padding: 0;
+      border: 1px solid rgba(255, 255, 255, 0.68);
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      color: #fff;
+      font-family: "Sora", sans-serif;
+      font-size: 10px;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 10px 24px rgba(14, 15, 18, 0.18);
+      transition: transform 160ms ease, box-shadow 160ms ease, outline-color 160ms ease;
+    }}
+    .graph-node:hover, .graph-node.selected {{
+      transform: translate(-50%, -50%) scale(1.08);
+      box-shadow: 0 16px 34px rgba(14, 15, 18, 0.24);
+      outline: 3px solid rgba(237, 94, 10, 0.2);
+    }}
+    .graph-label {{
+      position: absolute;
+      transform: translate(-50%, 12px);
+      width: 154px;
+      text-align: center;
+      color: var(--graphite);
+      font-size: 11px;
+      line-height: 1.25;
+      pointer-events: none;
+      text-shadow: 0 1px 0 rgba(255, 255, 255, 0.72);
+    }}
+    .graph-empty {{
+      min-height: 260px;
+      display: grid;
+      place-items: center;
+      text-align: center;
     }}
     pre {{
       white-space: pre-wrap;
@@ -595,7 +688,7 @@ def render_viewer_html(data: dict[str, Any]) -> str:
       <button data-tab="memories" class="active">Memórias</button>
       <button data-tab="tags">Tags</button>
       <button data-tab="sleeps">Sleeps</button>
-      <button data-tab="graph">Go deeper</button>
+      <button data-tab="graph">Grafo</button>
       <button data-tab="queues">Filas</button>
       <button data-tab="audit">Audit</button>
     </div>
@@ -641,7 +734,10 @@ function init() {{
   ].map(([k,v]) => `<div class="stat"><span class="muted">${{esc(k)}}</span><b>${{esc(v)}}</b></div>`).join('');
   const tagFilter = document.getElementById('tagFilter');
   tagFilter.innerHTML = '<option value="">Todas</option>' + DATA.major_tags.map(t => `<option>${{esc(t.major_tag)}}</option>`).join('');
-  ['search','tagFilter','scoreFilter'].forEach(id => document.getElementById(id).addEventListener('input', renderMemories));
+  ['search','tagFilter','scoreFilter'].forEach(id => document.getElementById(id).addEventListener('input', () => {{
+    renderMemories();
+    renderGraphVisual();
+  }}));
   document.querySelectorAll('[data-tab]').forEach(btn => btn.addEventListener('click', () => showTab(btn.dataset.tab)));
   renderAll();
 }}
@@ -727,6 +823,97 @@ function renderGraph() {{
     </div>`).join('') : '<div class="panel">Nenhum link go_deeper registrado.</div>';
   document.getElementById('tab-graph').innerHTML = `<div class="graph">${{html}}</div>`;
 }}
+function renderGraphVisual() {{
+  const allFiltered = filteredMemories();
+  const memories = allFiltered.slice(0, 220);
+  const visibleIds = new Set(memories.map(m => m.id));
+  const edges = DATA.go_deeper_edges.filter(e => visibleIds.has(e.from) && visibleIds.has(e.to));
+  if (!memories.length) {{
+    document.getElementById('tab-graph').innerHTML = '<div class="panel graph-empty"><p class="muted">Nenhuma memória encontrada para desenhar o grafo.</p></div>';
+    return;
+  }}
+  const width = 1060;
+  const height = 680;
+  const padX = 82;
+  const padY = 62;
+  const groups = [...new Set(memories.map(m => (m.major_tags && m.major_tags[0]) || 'sem-major-tag'))];
+  const positions = new Map();
+  memories.forEach((m, index) => {{
+    const groupIndex = groups.indexOf((m.major_tags && m.major_tags[0]) || 'sem-major-tag');
+    const groupWidth = (width - padX * 2) / Math.max(groups.length, 1);
+    const baseX = padX + groupWidth * (groupIndex + 0.5);
+    const wave = Math.sin((index + 1) * 1.91) * Math.min(52, groupWidth * 0.32);
+    const score = Math.max(0, Math.min(100, Number(m.score || 0)));
+    const y = padY + ((100 - score) / 100) * (height - padY * 2);
+    positions.set(m.id, {{ x: Math.max(38, Math.min(width - 38, baseX + wave)), y, score }});
+  }});
+  const lines = edges.map(e => {{
+    const a = positions.get(e.from);
+    const b = positions.get(e.to);
+    if (!a || !b) return '';
+    return `<path class="graph-edge" marker-end="url(#arrow)" d="M ${{a.x}} ${{a.y}} C ${{a.x}} ${{(a.y + b.y) / 2}}, ${{b.x}} ${{(a.y + b.y) / 2}}, ${{b.x}} ${{b.y}}" />`;
+  }}).join('');
+  const nodes = memories.map(m => {{
+    const pos = positions.get(m.id);
+    const score = pos.score;
+    const size = 18 + Math.round(score / 100 * 24);
+    const color = score >= 75 ? 'var(--ember-500)' : score >= 45 ? 'var(--brand-blue)' : 'var(--stone)';
+    const label = esc(m.synopsis || shortId(m.id));
+    return `
+      <button class="graph-node ${{m.id === selectedId ? 'selected' : ''}}" data-graph-id="${{esc(m.id)}}"
+        style="left:${{(pos.x / width) * 100}}%; top:${{(pos.y / height) * 100}}%; width:${{size}}px; height:${{size}}px; background:${{color}};"
+        title="${{label}} | score ${{score}} | ${{esc(shortId(m.id))}}">
+        ${{Math.round(score)}}
+      </button>
+      <div class="graph-label" style="left:${{(pos.x / width) * 100}}%; top:${{(pos.y / height) * 100}}%;">${{label}}</div>`;
+  }}).join('');
+  const bands = [
+    ['Superfície', 100],
+    ['Alta relevância', 75],
+    ['Média', 50],
+    ['Profunda', 25],
+    ['Fundo', 0],
+  ].map(([label, score]) => {{
+    const y = padY + ((100 - score) / 100) * (height - padY * 2);
+    return `<div class="surface-band" style="top:${{(y / height) * 100}}%">${{label}} · score ${{score}}</div>`;
+  }}).join('');
+  const hidden = allFiltered.length > memories.length ? `<p class="muted">Mostrando as primeiras ${{memories.length}} memórias filtradas para preservar a fluidez do HTML.</p>` : '';
+  document.getElementById('tab-graph').innerHTML = `
+    <div class="graph">
+      <div class="panel graph-head">
+        <div>
+          <h2>Grafo de memórias</h2>
+          <p class="muted">Cada nó é uma memória. Quanto mais alto, mais perto da superfície de acesso. As linhas indicam conexões <code>go_deeper</code>.</p>
+          ${{hidden}}
+        </div>
+        <div class="graph-legend">
+          <span class="legend-item"><span class="legend-dot"></span>score 75-100</span>
+          <span class="legend-item"><span class="legend-dot mid"></span>score 45-74</span>
+          <span class="legend-item"><span class="legend-dot deep"></span>score 0-44</span>
+          <span class="legend-item">${{edges.length}} links</span>
+        </div>
+      </div>
+      <div class="graph-stage">
+        ${{bands}}
+        <svg class="graph-svg" viewBox="0 0 ${{width}} ${{height}}" preserveAspectRatio="none" aria-hidden="true">
+          <defs>
+            <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="3.5" orient="auto">
+              <path d="M 0 0 L 8 3.5 L 0 7 z" fill="rgba(15, 71, 97, 0.34)"></path>
+            </marker>
+          </defs>
+          ${{lines}}
+        </svg>
+        ${{nodes}}
+      </div>
+    </div>`;
+  document.querySelectorAll('[data-graph-id]').forEach(node => {{
+    node.addEventListener('click', () => {{
+      selectedId = node.dataset.graphId;
+      renderMemories();
+      renderGraphVisual();
+    }});
+  }});
+}}
 function renderQueues() {{
   document.getElementById('tab-queues').innerHTML = `
     <div class="grid">
@@ -746,7 +933,7 @@ function renderAll() {{
   renderMemories();
   renderTags();
   renderSleeps();
-  renderGraph();
+  renderGraphVisual();
   renderQueues();
   renderAudit();
 }}

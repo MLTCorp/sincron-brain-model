@@ -86,6 +86,8 @@ def test_write_viewer_outputs_self_contained_html(tmp_path):
     assert "data:image/jpeg;base64," in html
     assert "viewer-data" in html
     assert "Conteúdo" in html
+    assert "Grafo de memórias" in html
+    assert "graph-stage" in html
 
 
 def test_build_viewer_data_can_limit_embedded_memories(tmp_path):
