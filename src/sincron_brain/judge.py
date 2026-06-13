@@ -18,6 +18,7 @@ from collections.abc import Callable
 
 from sincron_brain import reconcile
 from sincron_brain.config import VaultConfig
+from sincron_brain.major_tags import major_tag_prompt_guide
 from sincron_brain.models import DraftItem
 from sincron_brain.reconcile import Candidate, Decider, Decision
 
@@ -37,6 +38,7 @@ SYSTEM_PROMPT = (
     '"go_deeper":["<ids relacionados>"],'
     '"emotional":<bool>}\n\n'
     "Regras:\n"
+    f"{major_tag_prompt_guide()}\n"
     "- Nunca transforme turnos de conversa em transcrição crua por padrão. Recompile "
     "mensagens de usuário e resposta da IA em uma memória contextual, curta e acionável.\n"
     "- Preserve o fato durável e o contexto de uso. Ex: em vez de copiar 'Usuário: já "

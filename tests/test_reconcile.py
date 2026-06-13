@@ -59,6 +59,38 @@ def test_reconcile_create_writes_new_memory(tmp_path):
         assert mem.synopsis == "nova"
 
 
+def test_reconcile_uses_one_primary_major_tag_for_new_memory(tmp_path):
+    config = make_config(tmp_path)
+    draft = DraftItem(id="d", content="api key fica no .env")
+
+    def decide(_draft, _cands):
+        return Decision(
+            action="create",
+            major_tags=["external_access", "technical_context", "preferences"],
+            synopsis="API key fica no .env.",
+        )
+
+    with storage.open_db(config) as conn:
+        _, mem = reconcile.reconcile_draft(conn, draft, config, decide)
+
+    assert mem.major_tags == ["external_access"]
+
+
+def test_reconcile_uses_first_hint_tag_when_decision_has_no_major_tag(tmp_path):
+    config = make_config(tmp_path)
+    draft = DraftItem(id="d", content="deploy toda sexta", hint_tags=["schedule", "workflows"])
+
+    with storage.open_db(config) as conn:
+        _, mem = reconcile.reconcile_draft(
+            conn,
+            draft,
+            config,
+            lambda *_: Decision(action="create"),
+        )
+
+    assert mem.major_tags == ["schedule"]
+
+
 def test_reconcile_merge_enriches_without_duplicating(tmp_path):
     config = make_config(tmp_path)
     with storage.open_db(config) as conn:

@@ -34,6 +34,11 @@ def test_connect_creates_vault_and_project_mcp_config(tmp_path):
     assert settings["enabledMcpjsonServers"] == ["sincron-brain"]
     assert "use_memories(ids)" in (project / "AGENTS.md").read_text(encoding="utf-8")
     assert "remember_turn(user_message" in (project / "AGENTS.md").read_text(encoding="utf-8")
+    assert 'list_tags("preferences")' in (project / "AGENTS.md").read_text(encoding="utf-8")
+    assert "Major Tags are primary retrieval routes" in (
+        project / "AGENTS.md"
+    ).read_text(encoding="utf-8")
+    assert "schedule" in (project / "AGENTS.md").read_text(encoding="utf-8")
     assert "use_memories(ids)" in (project / "CLAUDE.md").read_text(encoding="utf-8")
     assert "remember_turn(user_message" in (project / "CLAUDE.md").read_text(encoding="utf-8")
 

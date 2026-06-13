@@ -11,6 +11,7 @@ from platformdirs import user_data_dir
 
 from sincron_brain import storage
 from sincron_brain.config import VaultConfig, load_config
+from sincron_brain.major_tags import default_major_tag_names_csv
 from sincron_brain.models import DraftItem, ReactivationEvent
 
 VAULT_ENV = "SINCRON_BRAIN_VAULT"
@@ -36,6 +37,13 @@ mcp = FastMCP(
         "their synopses, and search(query) as a fallback. Choose from synopses first. "
         "When a memory's full content is needed to answer the user, call use_memories(ids); "
         "that returns the content and queues reactivation for the next sleep. "
+        "When using memory in a user-facing conversation, inspect preferences first with "
+        "list_tags('preferences') and fetch relevant preference memories through "
+        "use_memories(ids). "
+        "Major Tags are primary retrieval routes, not free-form facets. Use one primary "
+        f"Major Tag when possible. Defaults: {default_major_tag_names_csv()}. "
+        "Create a new Major Tag only when no default fits and it is generic, snake_case, "
+        "reusable, and useful as a future search route. "
         "read_memory(id) is neutral inspection/debug compatibility and should not be the "
         "normal answer path. "
         "Use remember() to save new information for long-term recall. "

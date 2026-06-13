@@ -7,6 +7,8 @@ def test_mcp_instructions_make_use_memories_the_content_path():
     source = Path("src/sincron_brain/server.py").read_text(encoding="utf-8")
     assert "Choose from synopses first" in source
     assert "call use_memories(ids)" in source
+    assert "list_tags('preferences')" in source
+    assert "Major Tags are primary retrieval routes" in source
     assert "read_memory(id) is neutral inspection/debug compatibility" in source
 
 

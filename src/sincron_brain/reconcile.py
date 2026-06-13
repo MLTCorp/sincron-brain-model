@@ -8,7 +8,7 @@ Decider; a high-confidence FTS heuristic can serve as a cheap safety net.
 
 Two invariants protect the vault (see "A arte de esquecer" in CLAUDE.md):
   - Merge is additive, never a rewrite — content is appended, go_deeper and
-    major_tags are unioned, emotional charge takes the max.
+    the primary major_tag can be added, emotional charge takes the max.
   - A memory never grows unbounded: merging into an already-large memory is
     refused and becomes a new linked fragment, keeping retrieval fast.
 """
@@ -98,7 +98,9 @@ def _apply_merge(target: Memory, decision: Decision, config: VaultConfig) -> Mem
     if decision.content:
         target.content = f"{target.content}\n\n{decision.content}".strip()
     target.go_deeper = sorted(set(target.go_deeper) | set(decision.go_deeper))
-    target.major_tags = sorted(set(target.major_tags) | set(decision.major_tags))
+    target.major_tags = sorted(
+        set(target.major_tags) | set(_primary_major_tags(decision.major_tags))
+    )
     now = datetime.now(UTC)
     target.score = config.score.initial
     target.last_scored = now
@@ -111,7 +113,9 @@ def _apply_merge(target: Memory, decision: Decision, config: VaultConfig) -> Mem
 
 
 def _build_new(draft: DraftItem, decision: Decision, config: VaultConfig) -> Memory:
-    major_tags = decision.major_tags or draft.hint_tags or ["_uncategorized"]
+    major_tags = _primary_major_tags(decision.major_tags or draft.hint_tags)
+    if not major_tags:
+        major_tags = ["_uncategorized"]
     synopsis = decision.synopsis or _fallback_synopsis(draft.content)
     memory = Memory(
         id=storage.new_memory_id(synopsis[:40]),
@@ -147,3 +151,10 @@ def _fallback_synopsis(text: str, max_len: int = 400) -> str:
     if len(text) <= max_len:
         return text
     return text[: max_len - 1].rsplit(" ", 1)[0] + "…"
+
+
+def _primary_major_tags(tags: list[str]) -> list[str]:
+    for tag in tags:
+        if tag and tag.strip():
+            return [tag.strip()]
+    return []

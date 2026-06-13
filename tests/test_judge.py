@@ -80,6 +80,16 @@ def test_build_messages_defines_emotion_as_ai_feedback_not_narrated_feeling():
     assert "não reforço emocional do sistema" in blob
 
 
+def test_build_messages_includes_major_tag_taxonomy_and_primary_rule():
+    msgs = build_messages(DraftItem(id="d", content="..."), _cands())
+    blob = " ".join(m["content"] for m in msgs)
+    assert "Major Tags default" in blob
+    assert "external_access" in blob
+    assert "schedule" in blob
+    assert "Retorne uma unica major_tag" in blob
+    assert "preferences e especial" in blob
+
+
 def test_build_messages_for_conversation_turn_instructs_contextual_compilation():
     msgs = build_messages(
         DraftItem(

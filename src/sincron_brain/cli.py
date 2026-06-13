@@ -20,6 +20,7 @@ from sincron_brain.config import (
     VaultConfig,
     load_config,
 )
+from sincron_brain.major_tags import default_major_tag_names_csv
 
 app = typer.Typer(
     name="sincron-brain",
@@ -296,6 +297,9 @@ Use the `sincron-brain` MCP server as the project's long-term memory layer.
 
 - Before answering questions that may depend on prior project/user context, inspect memory first:
   `list_major_tags()` or `search()` -> `list_tags()` -> `use_memories(ids)`.
+- When using memory in a user-facing conversation, always inspect `preferences` first with
+  `list_tags("preferences")`; if any preference should shape the answer, fetch it through
+  `use_memories(ids)` so it is injected into the working context and reactivated.
 - Use `use_memories(ids)` when memory content is used in an answer. Do not use `read_memory()`
   for normal answers, because `use_memories()` queues reactivation for sleep-time scoring.
 - Prefer `remember_turn(user_message, agent_response, memory_reason)` when both sides of a
@@ -303,6 +307,12 @@ Use the `sincron-brain` MCP server as the project's long-term memory layer.
   preferences, project decisions, corrections, and information the user explicitly asks you
   to remember.
 - Do not store secrets, API keys, tokens, passwords, or unrelated transient chatter.
+- Major Tags are primary retrieval routes, not free-form facets. Use one primary Major Tag
+  whenever possible. Defaults: {default_major_tag_names_csv()}.
+- Create a new Major Tag only when no default category fits and the new category is generic,
+  reusable across future memories, snake_case, and useful as a future search route. There is
+  no separate registry command; a new Major Tag is registered when sleep indexes a memory
+  with that Major Tag.
 - `remember()` and `remember_turn()` only queue drafts. The sleep job indexes drafts later with
   `sleep_now()` or the configured sleep routine, compiling conversation turns into contextual
   memories rather than raw transcripts.

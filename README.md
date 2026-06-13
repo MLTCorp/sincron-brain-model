@@ -182,6 +182,20 @@ Exploratory navigation does not reinforce memories: `list_major_tags()`, `list_t
 list/search synopses -> use_memories(ids) -> answer
 ```
 
+## Major Tags
+
+Major Tags are primary retrieval routes, not free-form facets. The sleep judge
+uses one primary Major Tag whenever possible, with defaults such as
+`preferences`, `projects`, `technical_context`, `external_access`, `people`,
+`organizations`, and `schedule`.
+
+`preferences` is special: when an agent uses memory in a user-facing
+conversation, it should inspect preference memories first so the user's expected
+behavior is injected into the working context.
+
+See [docs/major-tags.md](docs/major-tags.md) for the full taxonomy and rules for
+creating a new Major Tag when the defaults are not enough.
+
 ## Audit log
 
 Each vault keeps a local JSONL audit log at:
