@@ -24,12 +24,15 @@ from typing import Literal
 from sincron_brain import scoring, storage
 from sincron_brain.config import VaultConfig
 from sincron_brain.models import DraftItem, Memory
+from sincron_brain.tags import normalize_tags
 
 
 @dataclass
 class Candidate:
     id: str
     synopsis: str
+    major_tags: list[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -37,6 +40,7 @@ class Decision:
     action: Literal["create", "merge"]
     target_id: str | None = None
     major_tags: list[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
     synopsis: str = ""
     content: str = ""
     go_deeper: list[str] = field(default_factory=list)
@@ -60,8 +64,10 @@ def find_candidates(
 
     if draft.hint_tags:
         hint = set(draft.hint_tags)
-        for row in conn.execute("SELECT id, major_tags, synopsis FROM memories"):
-            if hint & set(json.loads(row["major_tags"])) and row["id"] not in synopses:
+        for row in conn.execute("SELECT id, major_tags, tags, synopsis FROM memories"):
+            major_tags = json.loads(row["major_tags"])
+            tags = json.loads(row["tags"])
+            if hint & (set(major_tags) | set(tags)) and row["id"] not in synopses:
                 synopses[row["id"]] = row["synopsis"]
                 order.append(row["id"])
 
@@ -70,7 +76,20 @@ def find_candidates(
             synopses[hit["id"]] = hit["synopsis"]
             order.append(hit["id"])
 
-    return [Candidate(id=i, synopsis=synopses[i]) for i in order[:limit]]
+    out = []
+    for memory_id in order[:limit]:
+        row = conn.execute(
+            "SELECT major_tags, tags FROM memories WHERE id = ?", (memory_id,)
+        ).fetchone()
+        out.append(
+            Candidate(
+                id=memory_id,
+                synopsis=synopses[memory_id],
+                major_tags=json.loads(row["major_tags"]) if row else [],
+                tags=json.loads(row["tags"]) if row else [],
+            )
+        )
+    return out
 
 
 def reconcile_draft(
@@ -101,6 +120,7 @@ def _apply_merge(target: Memory, decision: Decision, config: VaultConfig) -> Mem
     target.major_tags = sorted(
         set(target.major_tags) | set(_primary_major_tags(decision.major_tags))
     )
+    target.tags = normalize_tags([*target.tags, *decision.tags])
     now = datetime.now(UTC)
     target.score = config.score.initial
     target.last_scored = now
@@ -120,6 +140,7 @@ def _build_new(draft: DraftItem, decision: Decision, config: VaultConfig) -> Mem
     memory = Memory(
         id=storage.new_memory_id(synopsis[:40]),
         major_tags=major_tags,
+        tags=normalize_tags(decision.tags),
         score=config.score.initial,
         source_type=draft.source_type,
         asset_ref=draft.asset_ref,

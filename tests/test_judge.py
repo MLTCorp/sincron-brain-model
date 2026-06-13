@@ -26,22 +26,28 @@ def _cands(*ids: str) -> list[Candidate]:
 def test_parse_create_decision():
     raw = (
         '{"action":"create","major_tags":["pessoas"],"synopsis":"Mateus",'
+        '"tags":["Matheus Massari","pessoas"],'
         '"content":"Memória contextual","go_deeper":["x"]}'
     )
     d = parse_decision(raw, _cands())
     assert d.action == "create"
     assert d.major_tags == ["pessoas"]
+    assert d.tags == ["Matheus Massari", "pessoas"]
     assert d.synopsis == "Mateus"
     assert d.content == "Memória contextual"
     assert d.go_deeper == ["x"]
 
 
 def test_parse_merge_maps_content_append():
-    raw = '{"action":"merge","target_id":"a","content_append":"Pai do Pedro","emotional":true}'
+    raw = (
+        '{"action":"merge","target_id":"a","content_append":"Pai do Pedro",'
+        '"tags":["family"],"emotional":true}'
+    )
     d = parse_decision(raw, _cands("a"))
     assert d.action == "merge"
     assert d.target_id == "a"
     assert d.content == "Pai do Pedro"
+    assert d.tags == ["family"]
     assert d.emotional is True
 
 
@@ -90,6 +96,9 @@ def test_build_messages_includes_major_tag_taxonomy_and_primary_rule():
     assert "Retorne uma unica major_tag" in blob
     assert "soul e especial" in blob
     assert "preferences e especial" in blob
+    assert "Tags comuns" in blob
+    assert "substantivos" in blob
+    assert "singular/plural duplicado" in blob
 
 
 def test_build_messages_for_conversation_turn_instructs_contextual_compilation():

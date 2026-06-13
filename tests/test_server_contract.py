@@ -10,6 +10,9 @@ def test_mcp_instructions_make_use_memories_the_content_path():
     assert "list_tags('soul')" in source
     assert "list_tags('preferences')" in source
     assert "Major Tags are primary retrieval routes" in source
+    assert "Common tags are noun-like retrieval labels" in source
+    assert "def list_common_tags" in source
+    assert "def list_memories_by_date" in source
     assert "read_memory(id) is neutral inspection/debug compatibility" in source
 
 

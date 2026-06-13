@@ -39,6 +39,8 @@ def test_connect_creates_vault_and_project_mcp_config(tmp_path):
     assert "Major Tags are primary retrieval routes" in (
         project / "AGENTS.md"
     ).read_text(encoding="utf-8")
+    assert "list_common_tags(major_tag)" in (project / "AGENTS.md").read_text(encoding="utf-8")
+    assert "snake_case singular tags" in (project / "AGENTS.md").read_text(encoding="utf-8")
     assert "soul" in (project / "AGENTS.md").read_text(encoding="utf-8")
     assert "schedule" in (project / "AGENTS.md").read_text(encoding="utf-8")
     assert "use_memories(ids)" in (project / "CLAUDE.md").read_text(encoding="utf-8")

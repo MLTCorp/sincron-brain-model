@@ -67,6 +67,7 @@ def test_reconcile_uses_one_primary_major_tag_for_new_memory(tmp_path):
         return Decision(
             action="create",
             major_tags=["external_access", "technical_context", "preferences"],
+            tags=["API Keys", "api_key", "env files"],
             synopsis="API key fica no .env.",
         )
 
@@ -74,6 +75,7 @@ def test_reconcile_uses_one_primary_major_tag_for_new_memory(tmp_path):
         _, mem = reconcile.reconcile_draft(conn, draft, config, decide)
 
     assert mem.major_tags == ["external_access"]
+    assert mem.tags == ["api_key", "env_file"]
 
 
 def test_reconcile_uses_first_hint_tag_when_decision_has_no_major_tag(tmp_path):
@@ -141,5 +143,6 @@ def test_reconcile_bloat_guard_falls_back_to_create(tmp_path):
         outcome, _mem = reconcile.reconcile_draft(conn, draft, config, decide)
         assert outcome == "created"  # too large to merge → new fragment
         assert count(conn) == 2
-        target = conn.execute("SELECT content FROM memories_fts WHERE id = ?", ("a",)).fetchone()
-        assert target["content"] == big  # untouched
+        row = conn.execute("SELECT file_path FROM memories WHERE id = ?", ("a",)).fetchone()
+        target = storage.read_memory_file(config.vault_path / row["file_path"])
+        assert target.content == big  # untouched

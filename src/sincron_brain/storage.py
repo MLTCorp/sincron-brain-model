@@ -19,11 +19,13 @@ import frontmatter
 
 from sincron_brain.config import VaultConfig
 from sincron_brain.models import DraftItem, Memory, ReactivationEvent
+from sincron_brain.tags import normalize_tags
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS memories (
     id TEXT PRIMARY KEY,
     major_tags TEXT NOT NULL DEFAULT '[]',
+    tags TEXT NOT NULL DEFAULT '[]',
     score INTEGER NOT NULL DEFAULT 100,
     created TEXT NOT NULL,
     last_accessed TEXT NOT NULL,
@@ -170,8 +172,18 @@ def open_db(config: VaultConfig) -> sqlite3.Connection:
     conn = sqlite3.connect(config.index_db)
     conn.row_factory = sqlite3.Row
     conn.executescript(SCHEMA)
+    _ensure_columns(conn)
     conn.commit()
     return conn
+
+
+def _ensure_columns(conn: sqlite3.Connection) -> None:
+    columns = {
+        row["name"]
+        for row in conn.execute("PRAGMA table_info(memories)").fetchall()
+    }
+    if "tags" not in columns:
+        conn.execute("ALTER TABLE memories ADD COLUMN tags TEXT NOT NULL DEFAULT '[]'")
 
 
 def _memory_file_path(config: VaultConfig, memory: Memory) -> Path:
@@ -182,6 +194,7 @@ def _memory_file_path(config: VaultConfig, memory: Memory) -> Path:
 
 def write_memory(config: VaultConfig, memory: Memory, conn: sqlite3.Connection) -> Path:
     """Write/overwrite the .md file and upsert the index row."""
+    memory.tags = normalize_tags(memory.tags)
     file_path = _memory_file_path(config, memory)
     file_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -191,13 +204,14 @@ def write_memory(config: VaultConfig, memory: Memory, conn: sqlite3.Connection) 
     conn.execute(
         """
         INSERT INTO memories
-            (id, major_tags, score, created, last_accessed, last_scored,
+            (id, major_tags, tags, score, created, last_accessed, last_scored,
              access_count, emotion_floor, source_type, asset_ref, go_deeper,
              synopsis, file_path)
         VALUES
-            (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             major_tags=excluded.major_tags,
+            tags=excluded.tags,
             score=excluded.score,
             last_accessed=excluded.last_accessed,
             last_scored=excluded.last_scored,
@@ -212,6 +226,7 @@ def write_memory(config: VaultConfig, memory: Memory, conn: sqlite3.Connection) 
         (
             memory.id,
             json.dumps(memory.major_tags),
+            json.dumps(memory.tags),
             memory.score,
             memory.created.isoformat(),
             memory.last_accessed.isoformat(),
@@ -227,9 +242,16 @@ def write_memory(config: VaultConfig, memory: Memory, conn: sqlite3.Connection) 
     )
 
     conn.execute("DELETE FROM memories_fts WHERE id = ?", (memory.id,))
+    fts_content = "\n".join(
+        [
+            memory.content,
+            " ".join(memory.major_tags),
+            " ".join(memory.tags),
+        ]
+    )
     conn.execute(
         "INSERT INTO memories_fts (id, synopsis, content) VALUES (?, ?, ?)",
-        (memory.id, memory.synopsis, memory.content),
+        (memory.id, memory.synopsis, fts_content),
     )
     conn.commit()
     return file_path
@@ -242,6 +264,7 @@ def read_memory_file(path: Path) -> Memory:
     return Memory(
         id=meta["id"],
         major_tags=list(meta.get("major_tags") or []),
+        tags=list(meta.get("tags") or []),
         score=int(meta.get("score", 100)),
         created=_parse_dt(meta.get("created")),
         last_accessed=_parse_dt(meta.get("last_accessed")),
@@ -311,7 +334,7 @@ def list_tags(
     """List memories under a major_tag, ordered by score DESC."""
     rows = conn.execute(
         """
-        SELECT id, major_tags, score, synopsis, last_accessed, access_count
+        SELECT id, major_tags, tags, score, synopsis, last_accessed, access_count
         FROM memories
         WHERE score >= ?
         ORDER BY score DESC
@@ -328,6 +351,7 @@ def list_tags(
             {
                 "id": r["id"],
                 "score": r["score"],
+                "tags": json.loads(r["tags"]),
                 "synopsis": r["synopsis"],
                 "last_accessed": r["last_accessed"],
                 "access_count": r["access_count"],
@@ -352,7 +376,7 @@ def search_fts(
     fts_query = (" " if match_all else " OR ").join(terms)
     rows = conn.execute(
         """
-        SELECT m.id, m.score, m.synopsis, m.major_tags,
+        SELECT m.id, m.score, m.synopsis, m.major_tags, m.tags,
                bm25(memories_fts) AS rank
         FROM memories_fts
         JOIN memories m ON m.id = memories_fts.id
@@ -368,9 +392,84 @@ def search_fts(
             "score": r["score"],
             "synopsis": r["synopsis"],
             "major_tags": json.loads(r["major_tags"]),
+            "tags": json.loads(r["tags"]),
         }
         for r in rows
     ]
+
+
+def list_common_tags(conn: sqlite3.Connection, major_tag: str | None = None) -> list[dict]:
+    """Return common tags with usage counts, optionally scoped to a Major Tag."""
+    rows = conn.execute("SELECT major_tags, tags, score FROM memories").fetchall()
+    bucket: dict[str, list[int]] = {}
+    for row in rows:
+        major_tags = json.loads(row["major_tags"])
+        if major_tag and major_tag not in major_tags:
+            continue
+        for tag in json.loads(row["tags"]):
+            bucket.setdefault(tag, []).append(row["score"])
+    return [
+        {
+            "tag": tag,
+            "count": len(scores),
+            "max_score": max(scores),
+            "avg_score": round(sum(scores) / len(scores), 1),
+        }
+        for tag, scores in sorted(bucket.items(), key=lambda kv: (-len(kv[1]), kv[0]))
+    ]
+
+
+def list_memories_by_date(
+    config: VaultConfig,
+    conn: sqlite3.Connection,
+    date: str,
+    field: str = "created",
+    limit: int = 100,
+) -> list[dict]:
+    """List memory cards whose selected timestamp falls on YYYY-MM-DD."""
+    valid_fields = {"created", "last_accessed", "last_scored"}
+    if field not in valid_fields:
+        raise ValueError(f"field must be one of {sorted(valid_fields)}")
+    _validate_date(date)
+    rows = conn.execute(
+        f"""
+        SELECT id, file_path
+        FROM memories
+        WHERE substr({field}, 1, 10) = ?
+        ORDER BY {field} ASC
+        LIMIT ?
+        """,
+        (date, limit),
+    ).fetchall()
+    out = []
+    for row in rows:
+        memory = read_memory_file(config.vault_path / row["file_path"])
+        out.append(memory_card(memory, status="matched"))
+    return out
+
+
+def memory_card(memory: Memory, status: str | None = None) -> dict:
+    card = {
+        "id": memory.id,
+        "major_tags": memory.major_tags,
+        "tags": memory.tags,
+        "score": memory.score,
+        "synopsis": memory.synopsis,
+        "created": memory.created.isoformat(),
+        "last_accessed": memory.last_accessed.isoformat(),
+        "last_scored": memory.last_scored.isoformat(),
+        "access_count": memory.access_count,
+    }
+    if status:
+        card["status"] = status
+    return card
+
+
+def _validate_date(value: str) -> None:
+    try:
+        datetime.strptime(value, "%Y-%m-%d")
+    except ValueError as e:
+        raise ValueError("date must use YYYY-MM-DD") from e
 
 
 def write_draft(config: VaultConfig, item: DraftItem) -> Path:

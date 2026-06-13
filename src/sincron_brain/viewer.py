@@ -43,6 +43,7 @@ def build_viewer_data(config: VaultConfig) -> dict[str, Any]:
                 {
                     "id": memory.id,
                     "major_tags": memory.major_tags,
+                    "tags": memory.tags,
                     "score": memory.score,
                     "emotion_floor": memory.emotion_floor,
                     "access_count": memory.access_count,
@@ -60,7 +61,7 @@ def build_viewer_data(config: VaultConfig) -> dict[str, Any]:
         major_tags = storage.list_major_tags(conn)
 
     audit = storage.read_audit(config)
-    tag_counts = Counter(tag for memory in memories for tag in memory["major_tags"])
+    tag_counts = Counter(tag for memory in memories for tag in memory["tags"])
     edges = [
         {"from": memory["id"], "to": target}
         for memory in memories
@@ -319,7 +320,7 @@ function filteredMemories() {{
   const tag = document.getElementById('tagFilter').value;
   const minScore = Number(document.getElementById('scoreFilter').value || 0);
   return DATA.memories.filter(m => {{
-    const text = [m.id, m.synopsis, m.content, m.source_type, ...(m.major_tags || [])].join(' ').toLowerCase();
+    const text = [m.id, m.synopsis, m.content, m.source_type, ...(m.major_tags || []), ...(m.tags || [])].join(' ').toLowerCase();
     return (!q || text.includes(q)) && (!tag || m.major_tags.includes(tag)) && m.score >= minScore;
   }});
 }}
@@ -330,7 +331,7 @@ function renderMemories() {{
     <div class="row ${{m.id === selectedId ? 'selected' : ''}}" data-memory-id="${{esc(m.id)}}">
       <div class="row-title"><span>${{esc(m.synopsis || m.id)}}</span><span class="score">${{m.score}}</span></div>
       <div class="muted">${{esc(shortId(m.id))}} · floor ${{m.emotion_floor}} · usos ${{m.access_count}}</div>
-      <div class="pillbar">${{m.major_tags.map(t => `<span class="pill">${{esc(t)}}</span>`).join('')}}</div>
+      <div class="pillbar">${{m.major_tags.map(t => `<span class="pill">${{esc(t)}}</span>`).join('')}}${{(m.tags || []).map(t => `<span class="pill">${{esc(t)}}</span>`).join('')}}</div>
     </div>`).join('') || '<div class="panel">Nenhuma memória encontrada.</div>';
   document.getElementById('tab-memories').innerHTML = `
     <div class="grid">
@@ -355,7 +356,8 @@ function renderMemoryDetail(m) {{
       <div><b>Criada</b><br>${{esc(m.created)}}</div>
       <div><b>Último acesso</b><br>${{esc(m.last_accessed)}}</div>
     </div>
-    <h3>Tags</h3><div class="pillbar">${{m.major_tags.map(t => `<span class="pill">${{esc(t)}}</span>`).join('')}}</div>
+    <h3>Major tags</h3><div class="pillbar">${{m.major_tags.map(t => `<span class="pill">${{esc(t)}}</span>`).join('')}}</div>
+    <h3>Tags</h3><div class="pillbar">${{(m.tags || []).map(t => `<span class="pill">${{esc(t)}}</span>`).join('') || '<span class="muted">Sem tags comuns</span>'}}</div>
     <h3>Go deeper</h3><div class="pillbar">${{go}}</div>
     <h3>Conteúdo</h3><div class="content">${{esc(m.content)}}</div>
   </div>`;

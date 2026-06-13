@@ -137,6 +137,8 @@ After restart, your agent will have access to these tools:
 | `remember_turn(user_message, agent_response, memory_reason, hint_tags, metadata)` | Queue both sides of a conversation turn so sleep can compile contextual memory instead of raw transcript. |
 | `list_major_tags()` | List all themes in the vault. Entry point for navigation. |
 | `list_tags(major_tag, min_score, limit)` | List memory cards (id + synopsis) under a theme. |
+| `list_common_tags(major_tag)` | List existing common tags for vocabulary reuse. |
+| `list_memories_by_date(date, field, limit)` | List memories created/used/scored on a date. |
 | `use_memories(memory_ids, reason)` | Main path to fetch full memory content and queue sleep-time reactivation. |
 | `read_memory(memory_id)` | Neutral inspection/debug escape hatch; not the normal answer path. |
 | `search(query, limit)` | Full-text fallback when tag navigation isn't enough. |
@@ -196,6 +198,11 @@ working context.
 
 See [docs/major-tags.md](docs/major-tags.md) for the full taxonomy and rules for
 creating a new Major Tag when the defaults are not enough.
+
+Common tags are functional retrieval labels inside a Major Tag. They should be
+nouns, named entities, or nominal concepts in `snake_case`, preferably singular.
+The sleep judge reuses existing tags when possible and creates new tags when they
+add a useful search route. See [docs/tags.md](docs/tags.md).
 
 ## Audit log
 

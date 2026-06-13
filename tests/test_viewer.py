@@ -17,7 +17,8 @@ def test_build_viewer_data_includes_memory_tags_go_deeper_and_sleep(tmp_path):
             config,
             Memory(
                 id="a",
-                major_tags=["projeto", "api-key"],
+                major_tags=["projeto"],
+                tags=["api_key", "env_file"],
                 score=88,
                 emotion_floor=40,
                 access_count=2,
@@ -61,7 +62,7 @@ def test_build_viewer_data_includes_memory_tags_go_deeper_and_sleep(tmp_path):
     assert data["branding"]["author"] == "Matheus Massari"
     assert {"from": "a", "to": "b"} in data["go_deeper_edges"]
     assert any(tag["major_tag"] == "projeto" for tag in data["major_tags"])
-    assert any(tag["tag"] == "api-key" for tag in data["tags"])
+    assert any(tag["tag"] == "api_key" for tag in data["tags"])
     assert data["sleeps"][0]["created"] == 1
 
 

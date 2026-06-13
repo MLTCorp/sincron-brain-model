@@ -22,6 +22,7 @@ class Memory(BaseModel):
 
     id: str
     major_tags: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
     score: int = 100
     created: datetime = Field(default_factory=_utcnow)
     last_accessed: datetime = Field(default_factory=_utcnow)
@@ -38,6 +39,7 @@ class Memory(BaseModel):
         return {
             "id": self.id,
             "major_tags": self.major_tags,
+            "tags": self.tags,
             "score": self.score,
             "created": self.created.isoformat(),
             "last_accessed": self.last_accessed.isoformat(),

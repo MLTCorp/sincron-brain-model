@@ -310,6 +310,10 @@ Use the `sincron-brain` MCP server as the project's long-term memory layer.
 - Do not store secrets, API keys, tokens, passwords, or unrelated transient chatter.
 - Major Tags are primary retrieval routes, not free-form facets. Use one primary Major Tag
   whenever possible. Defaults: {default_major_tag_names_csv()}.
+- Common tags are noun-like retrieval labels inside a Major Tag. Before creating tags,
+  inspect existing vocabulary with `list_common_tags(major_tag)` when useful. Reuse good
+  existing tags, but create new snake_case singular tags when they add a useful search route.
+  Avoid verbs, phrases, mini-summaries, singular/plural duplicates, and redundant synonyms.
 - Create a new Major Tag only when no default category fits and the new category is generic,
   reusable across future memories, snake_case, and useful as a future search route. There is
   no separate registry command; a new Major Tag is registered when sleep indexes a memory

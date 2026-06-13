@@ -42,6 +42,8 @@ mcp = FastMCP(
         "identity/preference memories through use_memories(ids). "
         "Major Tags are primary retrieval routes, not free-form facets. Use one primary "
         f"Major Tag when possible. Defaults: {default_major_tag_names_csv()}. "
+        "Common tags are noun-like retrieval labels: reuse existing tags when useful, "
+        "create new snake_case singular tags only when they add a useful search route. "
         "Create a new Major Tag only when no default fits and it is generic, snake_case, "
         "reusable, and useful as a future search route. "
         "read_memory(id) is neutral inspection/debug compatibility and should not be the "
@@ -218,6 +220,29 @@ def list_tags(major_tag: str, min_score: int = 0, limit: int = 50) -> list[dict]
 
 
 @mcp.tool()
+def list_common_tags(major_tag: str | None = None) -> list[dict]:
+    """List existing common tags so agents can reuse vocabulary before creating new tags.
+
+    Args:
+        major_tag: Optional Major Tag scope. When provided, only count tags used by
+            memories under that Major Tag.
+
+    Returns:
+        List of {tag, count, max_score, avg_score}.
+    """
+    config = get_config()
+    with storage.open_db(config) as conn:
+        result = storage.list_common_tags(conn, major_tag)
+    storage.write_audit(
+        config,
+        "tool.list_common_tags",
+        major_tag=major_tag,
+        result_count=len(result),
+    )
+    return result
+
+
+@mcp.tool()
 def read_memory(memory_id: str) -> dict | None:
     """Inspect a memory without reactivation. Compatibility/debug escape hatch.
 
@@ -241,6 +266,7 @@ def read_memory(memory_id: str) -> dict | None:
         result = {
             "id": memory.id,
             "major_tags": memory.major_tags,
+            "tags": memory.tags,
             "synopsis": memory.synopsis,
             "content": memory.content,
             "go_deeper": memory.go_deeper,
@@ -289,6 +315,7 @@ def use_memories(memory_ids: list[str], reason: str = "") -> dict:
                 {
                     "id": memory.id,
                     "major_tags": memory.major_tags,
+                    "tags": memory.tags,
                     "synopsis": memory.synopsis,
                     "content": memory.content,
                     "go_deeper": memory.go_deeper,
@@ -361,6 +388,37 @@ def search(query: str, limit: int = 20) -> list[dict]:
 
 
 @mcp.tool()
+def list_memories_by_date(date: str, field: str = "created", limit: int = 100) -> dict:
+    """List memories associated with a specific date.
+
+    Use this when the user asks what is in memory from a given day.
+
+    Args:
+        date: Date in YYYY-MM-DD format.
+        field: Which timestamp to filter by: created, last_accessed, or last_scored.
+        limit: Max number of memories.
+
+    Returns:
+        {date, field, memories}. Each memory includes id, major_tags, tags, synopsis,
+        score, timestamps, access_count, and statuses inferred from the audit log.
+    """
+    config = get_config()
+    with storage.open_db(config) as conn:
+        memories = storage.list_memories_by_date(config, conn, date, field, limit)
+        memories = _merge_audit_memory_events(config, conn, date, memories, limit)
+    storage.write_audit(
+        config,
+        "tool.list_memories_by_date",
+        date=date,
+        field=field,
+        limit=limit,
+        result_count=len(memories),
+        memory_ids=[item["id"] for item in memories],
+    )
+    return {"date": date, "field": field, "memories": memories}
+
+
+@mcp.tool()
 def sleep_now() -> dict:
     """Force the sleep/indexing job to run immediately instead of waiting for cron.
 
@@ -409,6 +467,42 @@ def stats() -> dict:
 def main() -> None:
     """Entry point for `sincron-brain serve` and uvx invocations."""
     mcp.run()
+
+
+def _merge_audit_memory_events(
+    config: VaultConfig,
+    conn,
+    date: str,
+    memories: list[dict],
+    limit: int,
+) -> list[dict]:
+    by_id = {item["id"]: item for item in memories}
+    for event in storage.read_audit(config):
+        if not str(event.get("ts", "")).startswith(date):
+            continue
+        memory_id = event.get("memory_id")
+        if not memory_id:
+            continue
+        status = _memory_event_status(event)
+        if not status:
+            continue
+        if memory_id not in by_id:
+            memory = storage.get_memory(config, conn, memory_id)
+            if memory is None:
+                continue
+            by_id[memory_id] = storage.memory_card(memory)
+        statuses = by_id[memory_id].setdefault("statuses", [])
+        if status not in statuses:
+            statuses.append(status)
+    return list(by_id.values())[:limit]
+
+
+def _memory_event_status(event: dict) -> str | None:
+    if event.get("event") == "sleep.draft_processed":
+        return str(event.get("outcome") or "processed")
+    if event.get("event") == "sleep.memory_reactivated":
+        return "reactivated"
+    return None
 
 
 if __name__ == "__main__":

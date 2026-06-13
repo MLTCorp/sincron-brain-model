@@ -21,6 +21,7 @@ from sincron_brain.config import VaultConfig
 from sincron_brain.major_tags import major_tag_prompt_guide
 from sincron_brain.models import DraftItem
 from sincron_brain.reconcile import Candidate, Decider, Decision
+from sincron_brain.tags import tag_policy_prompt_guide
 
 Completion = Callable[[list[dict]], str]
 
@@ -32,13 +33,16 @@ SYSTEM_PROMPT = (
     '- Mesmo assunto de uma candidata → {"action":"merge","target_id":"<id>",'
     '"synopsis":"<sinopse enriquecida>","content_append":"<texto novo a anexar>",'
     '"go_deeper":["<ids relacionados>"],"major_tags":["<tags a adicionar>"],'
+    '"tags":["<tags comuns a adicionar>"],'
     '"emotional":<bool>}\n'
     '- Assunto novo → {"action":"create","major_tags":["<tema>"],'
+    '"tags":["<tags comuns>"],'
     '"synopsis":"<~300-400 chars>","content":"<memória contextual consolidada>",'
     '"go_deeper":["<ids relacionados>"],'
     '"emotional":<bool>}\n\n'
     "Regras:\n"
     f"{major_tag_prompt_guide()}\n"
+    f"{tag_policy_prompt_guide()}\n"
     "- Nunca transforme turnos de conversa em transcrição crua por padrão. Recompile "
     "mensagens de usuário e resposta da IA em uma memória contextual, curta e acionável.\n"
     "- Preserve o fato durável e o contexto de uso. Ex: em vez de copiar 'Usuário: já "
@@ -71,11 +75,13 @@ def parse_decision(raw: str, candidates: list[Candidate]) -> Decision:
                 content=data.get("content_append") or data.get("content") or "",
                 go_deeper=list(data.get("go_deeper") or []),
                 major_tags=list(data.get("major_tags") or []),
+                tags=list(data.get("tags") or []),
                 emotional=bool(data.get("emotional", False)),
             )
         return Decision(
             action="create",
             major_tags=list(data.get("major_tags") or []),
+            tags=list(data.get("tags") or []),
             synopsis=data.get("synopsis") or "",
             content=data.get("content") or "",
             go_deeper=list(data.get("go_deeper") or []),
@@ -86,7 +92,13 @@ def parse_decision(raw: str, candidates: list[Candidate]) -> Decision:
 
 
 def build_messages(draft: DraftItem, candidates: list[Candidate]) -> list[dict]:
-    cand_lines = "\n".join(f"- id={c.id}: {c.synopsis}" for c in candidates) or "(nenhuma)"
+    cand_lines = "\n".join(
+        (
+            f"- id={c.id}; major_tags={c.major_tags or []}; "
+            f"tags={c.tags or []}: {c.synopsis}"
+        )
+        for c in candidates
+    ) or "(nenhuma)"
     if draft.source_type == "conversation_turn" and (
         draft.user_message or draft.agent_response or draft.memory_reason
     ):

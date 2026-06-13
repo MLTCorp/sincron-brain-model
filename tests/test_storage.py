@@ -1,6 +1,7 @@
 """Storage round-trips: .md file <-> Memory model <-> SQLite index."""
 
 import json
+import sqlite3
 from datetime import UTC, datetime, timedelta
 
 from sincron_brain import storage
@@ -19,6 +20,7 @@ def test_memory_roundtrip_preserves_emotion_floor(tmp_path):
     memory = Memory(
         id="mateus-cofundador",
         major_tags=["pessoas"],
+        tags=["matheus_massari", "sincron_ia"],
         emotion_floor=20,
         synopsis="Cofundador da Sincron.",
         content="corpo",
@@ -28,6 +30,7 @@ def test_memory_roundtrip_preserves_emotion_floor(tmp_path):
 
     reloaded = storage.read_memory_file(path)
     assert reloaded.emotion_floor == 20
+    assert reloaded.tags == ["matheus_massari", "sincron_ia"]
     assert isinstance(reloaded.emotion_floor, int)
 
 
@@ -36,13 +39,38 @@ def test_search_fts_any_returns_partial_matches(tmp_path):
     with storage.open_db(config) as conn:
         m = Memory(
             id="x", major_tags=["t"], synopsis="programa XPTO",
+            tags=["access_panel"],
             content="o acesso ao programa XPTO e feito pelo painel",
         )
         storage.write_memory(config, m, conn)
         all_mode = storage.search_fts(conn, "como entro no programa XPTO")
         any_mode = storage.search_fts(conn, "como entro no programa XPTO", match_all=False)
+        tag_mode = storage.search_fts(conn, "access_panel")
     assert all_mode == []  # AND-mode: requires every token, misses
     assert "x" in [h["id"] for h in any_mode]  # ANY-mode: any token, hits
+    assert tag_mode[0]["tags"] == ["access_panel"]
+
+
+def test_list_common_tags_and_memories_by_date(tmp_path):
+    config = make_config(tmp_path)
+    created = datetime(2026, 6, 13, 10, 0, tzinfo=UTC)
+    memory = Memory(
+        id="m-date",
+        major_tags=["external_access"],
+        tags=["api_key", "env_file"],
+        created=created,
+        last_accessed=created,
+        last_scored=created,
+        synopsis="API key fica no .env.",
+    )
+    with storage.open_db(config) as conn:
+        storage.write_memory(config, memory, conn)
+        tags = storage.list_common_tags(conn, "external_access")
+        memories = storage.list_memories_by_date(config, conn, "2026-06-13")
+
+    assert [tag["tag"] for tag in tags] == ["api_key", "env_file"]
+    assert memories[0]["id"] == "m-date"
+    assert memories[0]["tags"] == ["api_key", "env_file"]
 
 
 def test_audit_log_redacts_sensitive_content(tmp_path):
@@ -121,6 +149,40 @@ def test_index_stores_emotion_floor(tmp_path):
             "SELECT emotion_floor FROM memories WHERE id = ?", (memory.id,)
         ).fetchone()
     assert row["emotion_floor"] == 10
+
+
+def test_open_db_migrates_missing_tags_column(tmp_path):
+    config = make_config(tmp_path)
+    conn = sqlite3.connect(config.index_db)
+    conn.execute(
+        """
+        CREATE TABLE memories (
+            id TEXT PRIMARY KEY,
+            major_tags TEXT NOT NULL DEFAULT '[]',
+            score INTEGER NOT NULL DEFAULT 100,
+            created TEXT NOT NULL,
+            last_accessed TEXT NOT NULL,
+            last_scored TEXT NOT NULL,
+            access_count INTEGER NOT NULL DEFAULT 0,
+            emotion_floor INTEGER NOT NULL DEFAULT 0,
+            source_type TEXT NOT NULL DEFAULT 'text',
+            asset_ref TEXT,
+            go_deeper TEXT NOT NULL DEFAULT '[]',
+            synopsis TEXT NOT NULL DEFAULT '',
+            file_path TEXT NOT NULL
+        )
+        """
+    )
+    conn.commit()
+    conn.close()
+
+    with storage.open_db(config) as migrated:
+        columns = {
+            row["name"]
+            for row in migrated.execute("PRAGMA table_info(memories)").fetchall()
+        }
+
+    assert "tags" in columns
 
 
 def test_get_memory_is_read_only(tmp_path):
