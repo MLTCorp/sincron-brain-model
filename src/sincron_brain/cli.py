@@ -297,9 +297,10 @@ Use the `sincron-brain` MCP server as the project's long-term memory layer.
 
 - Before answering questions that may depend on prior project/user context, inspect memory first:
   `list_major_tags()` or `search()` -> `list_tags()` -> `use_memories(ids)`.
-- When using memory in a user-facing conversation, always inspect `preferences` first with
-  `list_tags("preferences")`; if any preference should shape the answer, fetch it through
-  `use_memories(ids)` so it is injected into the working context and reactivated.
+- When using memory in a user-facing conversation, always inspect `soul` and `preferences`
+  first with `list_tags("soul")` and `list_tags("preferences")`. If any identity or
+  preference memory should shape the answer, fetch it through `use_memories(ids)` so it is
+  injected into the working context and reactivated.
 - Use `use_memories(ids)` when memory content is used in an answer. Do not use `read_memory()`
   for normal answers, because `use_memories()` queues reactivation for sleep-time scoring.
 - Prefer `remember_turn(user_message, agent_response, memory_reason)` when both sides of a

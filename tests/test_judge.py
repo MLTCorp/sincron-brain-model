@@ -84,9 +84,11 @@ def test_build_messages_includes_major_tag_taxonomy_and_primary_rule():
     msgs = build_messages(DraftItem(id="d", content="..."), _cands())
     blob = " ".join(m["content"] for m in msgs)
     assert "Major Tags default" in blob
+    assert "soul" in blob
     assert "external_access" in blob
     assert "schedule" in blob
     assert "Retorne uma unica major_tag" in blob
+    assert "soul e especial" in blob
     assert "preferences e especial" in blob
 
 

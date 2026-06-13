@@ -13,6 +13,7 @@ Use these defaults whenever possible:
 
 | Major Tag | Use for |
 |---|---|
+| `soul` | Durable AI identity, mission, posture, personality, principles, and cognitive style. |
 | `user_profile` | Stable facts about the user, role, responsibilities, and personal/professional context. |
 | `preferences` | How the user wants the AI to answer, behave, decide, format, avoid, or prioritize work. |
 | `projects` | Projects, products, repositories, initiatives, systems, or named workstreams. |
@@ -57,10 +58,21 @@ Example:
 }
 ```
 
-## Preferences Are Special
+## Soul And Preferences Are Special
 
-`preferences` stores behavior the user expects from the AI. These memories should
-be consulted whenever the agent uses memory in a user-facing conversation.
+`soul` stores who the AI should be. It is for durable recommendations about the
+AI's identity, mission, posture, personality, principles, or cognitive style.
+
+Examples:
+
+- be a proactive technical partner
+- explain simply when the user is not technical
+- challenge weak ideas with care
+- preserve continuity and reduce repeated work
+- keep a warm, direct, collaborative posture
+
+`preferences` stores how the user expects to be served. These memories should
+adapt the AI to the user's desired experience.
 
 Examples:
 
@@ -69,6 +81,13 @@ Examples:
 - repeated corrections about how the AI should work
 - rules the user expects the AI to follow
 - things the user does not want to repeat
+
+When the agent uses memory in a user-facing conversation, it should consult
+`soul` first, then `preferences`, then task-specific memories:
+
+```text
+soul -> preferences -> task memories
+```
 
 `constraints` is intentionally not a default Major Tag. User constraints and
 rules belong in `preferences` unless they clearly fit another functional route.
@@ -103,6 +122,19 @@ Use:
 ```json
 {
   "major_tags": ["external_access"]
+}
+```
+
+User says:
+
+> You should act as a proactive, careful technical partner who explains simply
+> when I am not technical.
+
+Use:
+
+```json
+{
+  "major_tags": ["soul"]
 }
 ```
 

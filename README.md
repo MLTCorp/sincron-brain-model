@@ -186,12 +186,13 @@ list/search synopses -> use_memories(ids) -> answer
 
 Major Tags are primary retrieval routes, not free-form facets. The sleep judge
 uses one primary Major Tag whenever possible, with defaults such as
-`preferences`, `projects`, `technical_context`, `external_access`, `people`,
-`organizations`, and `schedule`.
+`soul`, `preferences`, `projects`, `technical_context`, `external_access`,
+`people`, `organizations`, and `schedule`.
 
-`preferences` is special: when an agent uses memory in a user-facing
-conversation, it should inspect preference memories first so the user's expected
-behavior is injected into the working context.
+`soul` and `preferences` are special: when an agent uses memory in a user-facing
+conversation, it should inspect identity and preference memories first so the
+AI's durable posture and the user's expected behavior are injected into the
+working context.
 
 See [docs/major-tags.md](docs/major-tags.md) for the full taxonomy and rules for
 creating a new Major Tag when the defaults are not enough.

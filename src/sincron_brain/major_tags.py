@@ -4,6 +4,13 @@ from __future__ import annotations
 
 DEFAULT_MAJOR_TAGS = (
     {
+        "name": "soul",
+        "description": (
+            "Durable AI identity, mission, posture, personality, principles, and "
+            "cognitive style."
+        ),
+    },
+    {
         "name": "user_profile",
         "description": (
             "Stable facts about the user, role, responsibilities, and "
@@ -115,7 +122,10 @@ def major_tag_prompt_guide() -> str:
         "- Crie uma nova Major Tag somente se nenhuma default servir e se ela puder "
         "agrupar varias memorias futuras.",
         "- Nova Major Tag deve usar snake_case, ser generica, curta, funcional e reutilizavel.",
+        "- soul e especial: use quando a informacao recomendar uma postura, "
+        "personalidade, missao, identidade, principio ou estilo cognitivo duravel da IA.",
         "- preferences e especial: memorias nessa categoria moldam o comportamento "
-        "do agente e devem ser consultadas em conversas que usam memoria.",
+        "do agente para as preferencias do usuario.",
+        "- soul e preferences devem ser consultadas em conversas que usam memoria.",
     ]
     return "\n".join(lines)
