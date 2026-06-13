@@ -6,8 +6,9 @@ whether to create a new memory or enrich an existing one.
 
 The completion call is injected (`Completion`) so prompt construction and
 response parsing are testable without an API key. The default completion routes
-through litellm to the configured provider. Parsing is defensive: any malformed
-output falls back to a safe `create`, so a bad LLM response never breaks sleep.
+through litellm to the configured provider. Completion and parsing are defensive:
+provider failures or malformed output fall back to a safe `create`, so a bad LLM
+response never breaks sleep.
 """
 
 from __future__ import annotations
@@ -90,7 +91,10 @@ def make_judge(config: VaultConfig, complete: Completion | None = None) -> Decid
     do_complete = complete or _litellm_completion(config)
 
     def decide(draft: DraftItem, candidates: list[Candidate]) -> Decision:
-        raw = do_complete(build_messages(draft, candidates))
+        try:
+            raw = do_complete(build_messages(draft, candidates))
+        except Exception:
+            return Decision(action="create")
         return parse_decision(raw, candidates)
 
     return decide

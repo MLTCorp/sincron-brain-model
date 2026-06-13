@@ -95,6 +95,19 @@ def test_judge_returns_create_from_injected_llm():
     assert d.synopsis == "S"
 
 
+def test_judge_provider_failure_falls_back_to_safe_create():
+    cfg = VaultConfig(vault_path=Path("/vault"))
+
+    def raise_provider_error(_messages):
+        raise RuntimeError("provider unavailable")
+
+    decide = make_judge(cfg, complete=raise_provider_error)
+    d = decide(DraftItem(id="d", content="..."), _cands("a"))
+
+    assert d.action == "create"
+    assert d.major_tags == []
+
+
 def test_default_decider_without_api_key_is_create_only():
     cfg = VaultConfig(
         vault_path=Path("/vault"),
