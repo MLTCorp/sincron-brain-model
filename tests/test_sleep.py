@@ -187,3 +187,43 @@ def test_sleep_simulates_days_emotion_floor_and_reactivation(tmp_path):
     assert later["score"] == 71
     assert later["emotion_floor"] == 40
     assert later["access_count"] == 1
+
+
+def test_sleep_uses_compiled_context_for_conversation_turn(tmp_path):
+    config = make_config(tmp_path)
+    storage.write_draft(
+        config,
+        DraftItem(
+            id="d-turn",
+            content="Contexto consolidado do turno: API key fica no .env.",
+            source_type="conversation_turn",
+            user_message="Droga, ja falei que a API key fica no .env.",
+            agent_response="Desculpe, vou lembrar.",
+            memory_reason="Correção do usuário: API key fica no .env; não perguntar de novo.",
+            hint_tags=["projeto"],
+        ),
+    )
+
+    def compiled_create(_draft, _candidates):
+        return Decision(
+            action="create",
+            major_tags=["projeto"],
+            synopsis="Usuário já corrigiu a IA sobre a API key no .env.",
+            content=(
+                "O usuário já corrigiu a IA por perguntar repetidamente onde fica a API key. "
+                "Neste projeto, considerar que a API key fica no arquivo .env e evitar "
+                "perguntar novamente."
+            ),
+            emotional=True,
+        )
+
+    sleep.run_sleep(config, decide=compiled_create)
+
+    with storage.open_db(config) as conn:
+        row = conn.execute("SELECT id, file_path, emotion_floor FROM memories").fetchone()
+        memory = storage.read_memory_file(config.vault_path / row["file_path"])
+
+    assert row["emotion_floor"] == 40
+    assert "API key fica no arquivo .env" in memory.content
+    assert "Droga" not in memory.content
+    assert "Desculpe" not in memory.content

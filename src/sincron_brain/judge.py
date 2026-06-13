@@ -33,9 +33,17 @@ SYSTEM_PROMPT = (
     '"go_deeper":["<ids relacionados>"],"major_tags":["<tags a adicionar>"],'
     '"emotional":<bool>}\n'
     '- Assunto novo → {"action":"create","major_tags":["<tema>"],'
-    '"synopsis":"<~300-400 chars>","go_deeper":["<ids relacionados>"],'
+    '"synopsis":"<~300-400 chars>","content":"<memória contextual consolidada>",'
+    '"go_deeper":["<ids relacionados>"],'
     '"emotional":<bool>}\n\n'
     "Regras:\n"
+    "- Nunca transforme turnos de conversa em transcrição crua por padrão. Recompile "
+    "mensagens de usuário e resposta da IA em uma memória contextual, curta e acionável.\n"
+    "- Preserve o fato durável e o contexto de uso. Ex: em vez de copiar 'Usuário: já "
+    "falei...' / 'IA: desculpe...', grave que o usuário já corrigiu a IA sobre X e que "
+    "da próxima vez deve-se usar Y.\n"
+    "- Sinais emocionais devem virar prioridade/contexto, não repetição literal da fala "
+    "emocional na memória final.\n"
     "- A sinopse é um convite para ler o conteúdo: densa, e PRESERVANDO palavras-chave "
     "e nomes próprios (sistemas, pessoas, produtos) que tornam a memória localizável.\n"
     "- Prefira LINKAR (go_deeper) a duplicar conteúdo, e a inchar uma memória grande.\n"
@@ -67,6 +75,7 @@ def parse_decision(raw: str, candidates: list[Candidate]) -> Decision:
             action="create",
             major_tags=list(data.get("major_tags") or []),
             synopsis=data.get("synopsis") or "",
+            content=data.get("content") or "",
             go_deeper=list(data.get("go_deeper") or []),
             emotional=bool(data.get("emotional", False)),
         )
@@ -76,10 +85,24 @@ def parse_decision(raw: str, candidates: list[Candidate]) -> Decision:
 
 def build_messages(draft: DraftItem, candidates: list[Candidate]) -> list[dict]:
     cand_lines = "\n".join(f"- id={c.id}: {c.synopsis}" for c in candidates) or "(nenhuma)"
-    user = (
-        f"NOVA INFORMAÇÃO (source={draft.source_type}):\n{draft.content}\n\n"
-        f"MEMÓRIAS EXISTENTES CANDIDATAS:\n{cand_lines}"
-    )
+    if draft.source_type == "conversation_turn" and (
+        draft.user_message or draft.agent_response or draft.memory_reason
+    ):
+        user = (
+            "NOVA INFORMAÇÃO (source=conversation_turn):\n"
+            f"MOTIVO PARA MEMÓRIA:\n{draft.memory_reason or '(não informado)'}\n\n"
+            f"MENSAGEM DO USUÁRIO (material bruto, não copie como transcrição):\n"
+            f"{draft.user_message or '(vazia)'}\n\n"
+            f"RESPOSTA DA IA (material bruto, não copie como transcrição):\n"
+            f"{draft.agent_response or '(vazia)'}\n\n"
+            f"FALLBACK CONTEXTUAL JÁ COMPILADO:\n{draft.content}\n\n"
+            f"MEMÓRIAS EXISTENTES CANDIDATAS:\n{cand_lines}"
+        )
+    else:
+        user = (
+            f"NOVA INFORMAÇÃO (source={draft.source_type}):\n{draft.content}\n\n"
+            f"MEMÓRIAS EXISTENTES CANDIDATAS:\n{cand_lines}"
+        )
     return [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": user},

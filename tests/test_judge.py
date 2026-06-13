@@ -24,11 +24,15 @@ def _cands(*ids: str) -> list[Candidate]:
 
 
 def test_parse_create_decision():
-    raw = '{"action":"create","major_tags":["pessoas"],"synopsis":"Mateus","go_deeper":["x"]}'
+    raw = (
+        '{"action":"create","major_tags":["pessoas"],"synopsis":"Mateus",'
+        '"content":"Memória contextual","go_deeper":["x"]}'
+    )
     d = parse_decision(raw, _cands())
     assert d.action == "create"
     assert d.major_tags == ["pessoas"]
     assert d.synopsis == "Mateus"
+    assert d.content == "Memória contextual"
     assert d.go_deeper == ["x"]
 
 
@@ -74,6 +78,25 @@ def test_build_messages_defines_emotion_as_ai_feedback_not_narrated_feeling():
     assert "Feedback positivo" in blob
     assert "Esse cliente me deixou frustrado" in blob
     assert "não reforço emocional do sistema" in blob
+
+
+def test_build_messages_for_conversation_turn_instructs_contextual_compilation():
+    msgs = build_messages(
+        DraftItem(
+            id="d",
+            content="Contexto consolidado do turno: API key fica no .env.",
+            source_type="conversation_turn",
+            user_message="Droga, ja falei que a API key fica no .env.",
+            agent_response="Desculpe, vou lembrar.",
+            memory_reason="Correção do usuário: a API key fica no .env; não perguntar de novo.",
+        ),
+        _cands(),
+    )
+    blob = " ".join(m["content"] for m in msgs)
+    assert "MENSAGEM DO USUÁRIO" in blob
+    assert "RESPOSTA DA IA" in blob
+    assert "não copie como transcrição" in blob
+    assert "FALLBACK CONTEXTUAL" in blob
 
 
 def test_judge_returns_merge_from_injected_llm():

@@ -47,6 +47,7 @@ class CaptureConfig(BaseModel):
     allowed_source_types: list[str] = Field(
         default_factory=lambda: [
             "text",
+            "conversation_turn",
             "user_message",
             "agent_response",
             "voice_transcript",

@@ -62,7 +62,8 @@ and writes a project-level `.mcp.json` like this. For Claude Code projects, it
 also syncs `.claude/settings.local.json` so the `sincron-brain` server is enabled
 and stale project MCP entries are removed. It also writes a managed memory
 instruction block to `AGENTS.md`/`CLAUDE.md`, so agents know when to consult
-`use_memories()` and when to save durable facts with `remember()`.
+`use_memories()` and when to save durable facts with `remember()` or full
+conversation turns with `remember_turn()`.
 
 ```json
 {
@@ -130,6 +131,7 @@ After restart, your agent will have access to these tools:
 | Tool | Purpose |
 |---|---|
 | `remember(content, source_type, asset_ref, hint_tags, metadata)` | Queue content for indexing at next sleep. |
+| `remember_turn(user_message, agent_response, memory_reason, hint_tags, metadata)` | Queue both sides of a conversation turn so sleep can compile contextual memory instead of raw transcript. |
 | `list_major_tags()` | List all themes in the vault. Entry point for navigation. |
 | `list_tags(major_tag, min_score, limit)` | List memory cards (id + synopsis) under a theme. |
 | `use_memories(memory_ids, reason)` | Main path to fetch full memory content and queue sleep-time reactivation. |

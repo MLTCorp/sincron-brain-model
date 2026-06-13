@@ -39,6 +39,8 @@ mcp = FastMCP(
         "read_memory(id) is neutral inspection/debug compatibility and should not be the "
         "normal answer path. "
         "Use remember() to save new information for long-term recall. "
+        "Use remember_turn() when both user message and agent response are available; "
+        "sleep will compile the turn into contextual memory instead of preserving raw chat. "
         "The actual indexing happens during the sleep job (nightly cron), not on remember()."
     ),
 )
@@ -92,6 +94,71 @@ def remember(
         "queued_at": item.timestamp.isoformat(),
         "queue_size": queue_size,
     }
+
+
+@mcp.tool()
+def remember_turn(
+    user_message: str,
+    agent_response: str,
+    memory_reason: str,
+    hint_tags: list[str] | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> dict:
+    """Queue a conversation turn for contextual long-term memorization.
+
+    Use this when the host has both sides of the turn. The raw user/agent text is
+    stored in the draft for sleep-time analysis, but the fallback content is a
+    compact contextual note, not a raw transcript. The sleep judge should compile
+    the turn into durable memory such as "the user previously corrected X; use Y"
+    instead of storing alternating chat messages.
+
+    Args:
+        user_message: The user's original message.
+        agent_response: The agent's response/action.
+        memory_reason: Why this turn should become memory, ideally including the
+            durable fact or correction in concise form.
+        hint_tags: Optional suggested tags.
+        metadata: Free-form dict attached to the draft for the host app's use.
+
+    Returns:
+        {"draft_id": str, "queued_at": iso8601, "queue_size": int}
+    """
+    config = get_config()
+    item = DraftItem(
+        id=storage.new_memory_id(),
+        content=_compiled_turn_fallback_content(memory_reason),
+        source_type="conversation_turn",
+        hint_tags=hint_tags or [],
+        metadata=metadata or {},
+        user_message=user_message,
+        agent_response=agent_response,
+        memory_reason=memory_reason,
+    )
+    storage.write_draft(config, item)
+    queue_size = len(list(config.draft_dir.glob("*.json")))
+    storage.write_audit(
+        config,
+        "tool.remember_turn",
+        draft_id=item.id,
+        source_type=item.source_type,
+        hint_tags=hint_tags or [],
+        queue_size=queue_size,
+        has_user_message=bool(user_message),
+        has_agent_response=bool(agent_response),
+        has_memory_reason=bool(memory_reason),
+    )
+    return {
+        "draft_id": item.id,
+        "queued_at": item.timestamp.isoformat(),
+        "queue_size": queue_size,
+    }
+
+
+def _compiled_turn_fallback_content(memory_reason: str) -> str:
+    reason = memory_reason.strip()
+    if not reason:
+        return "Contexto consolidado de turno conversacional para indexação no sono."
+    return f"Contexto consolidado do turno: {reason}"
 
 
 @mcp.tool()

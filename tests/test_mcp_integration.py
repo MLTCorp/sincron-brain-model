@@ -41,6 +41,7 @@ async def test_generic_mcp_client_can_run_memory_lifecycle(tmp_path):
         tool_names = {tool.name for tool in tools.tools}
         assert {
             "remember",
+            "remember_turn",
             "stats",
             "sleep_now",
             "search",
@@ -54,10 +55,13 @@ async def test_generic_mcp_client_can_run_memory_lifecycle(tmp_path):
 
         remembered = await _call_text(
             session,
-            "remember",
+            "remember_turn",
             {
-                "content": "Projeto MCP agnostico usa memoria por stdio.",
-                "source_type": "user_message",
+                "user_message": "Ja falei que este projeto usa memoria por stdio.",
+                "agent_response": "Vou lembrar que o projeto usa memoria por stdio.",
+                "memory_reason": (
+                    "Correção do usuário: projeto MCP agnostico usa memoria por stdio."
+                ),
                 "hint_tags": ["mcp", "agnostico"],
             },
         )
@@ -79,7 +83,8 @@ async def test_generic_mcp_client_can_run_memory_lifecycle(tmp_path):
             {"memory_ids": [memory_id], "reason": "generic MCP answer context"},
         )
         assert used["queued_reactivation"] is True
-        assert used["memories"][0]["content"] == "Projeto MCP agnostico usa memoria por stdio."
+        assert "projeto MCP agnostico usa memoria por stdio" in used["memories"][0]["content"]
+        assert "agent_response" not in used["memories"][0]["content"]
 
         after_use = await _call_text(session, "stats")
         assert after_use["reactivation_queue"] == 1
@@ -93,6 +98,6 @@ async def test_generic_mcp_client_can_run_memory_lifecycle(tmp_path):
         assert final["reactivation_queue"] == 0
 
     events = storage.read_audit(config)
-    assert "tool.remember" in [event["event"] for event in events]
+    assert "tool.remember_turn" in [event["event"] for event in events]
     assert "tool.use_memories" in [event["event"] for event in events]
     assert "sleep.memory_reactivated" in [event["event"] for event in events]

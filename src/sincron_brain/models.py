@@ -61,6 +61,9 @@ class DraftItem(BaseModel):
     hint_tags: list[str] = Field(default_factory=list)
     timestamp: datetime = Field(default_factory=_utcnow)
     metadata: dict[str, Any] = Field(default_factory=dict)
+    user_message: str | None = None
+    agent_response: str | None = None
+    memory_reason: str | None = None
 
 
 class ReactivationEvent(BaseModel):

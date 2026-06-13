@@ -120,7 +120,7 @@ def _build_new(draft: DraftItem, decision: Decision, config: VaultConfig) -> Mem
         source_type=draft.source_type,
         asset_ref=draft.asset_ref,
         synopsis=synopsis,
-        content=draft.content,
+        content=decision.content or draft.content,
         go_deeper=decision.go_deeper,
     )
     if decision.emotional:

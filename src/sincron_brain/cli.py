@@ -282,11 +282,14 @@ Use the `sincron-brain` MCP server as the project's long-term memory layer.
   `list_major_tags()` or `search()` -> `list_tags()` -> `use_memories(ids)`.
 - Use `use_memories(ids)` when memory content is used in an answer. Do not use `read_memory()`
   for normal answers, because `use_memories()` queues reactivation for sleep-time scoring.
-- Use `remember()` for durable facts, user preferences, project decisions, corrections, and
-  information the user explicitly asks you to remember.
+- Prefer `remember_turn(user_message, agent_response, memory_reason)` when both sides of a
+  conversation turn are available. Use `remember()` for standalone durable facts, user
+  preferences, project decisions, corrections, and information the user explicitly asks you
+  to remember.
 - Do not store secrets, API keys, tokens, passwords, or unrelated transient chatter.
-- `remember()` only queues drafts. The sleep job indexes drafts later with `sleep_now()` or the
-  configured sleep routine.
+- `remember()` and `remember_turn()` only queue drafts. The sleep job indexes drafts later with
+  `sleep_now()` or the configured sleep routine, compiling conversation turns into contextual
+  memories rather than raw transcripts.
 {MEMORY_INSTRUCTIONS_END}
 """
 
