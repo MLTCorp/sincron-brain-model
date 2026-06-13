@@ -53,6 +53,9 @@ $env:ANTHROPIC_API_KEY = "sk-ant-..."
 # (Optional) verify it works
 sincron-brain stats
 
+# (Optional) generate a local debug HTML viewer
+sincron-brain viewer
+
 # Force a sleep run on demand
 sincron-brain sleep-now
 ```
@@ -139,6 +142,24 @@ After restart, your agent will have access to these tools:
 | `search(query, limit)` | Full-text fallback when tag navigation isn't enough. |
 | `sleep_now()` | Force indexing job to run immediately. |
 | `stats()` | Vault diagnostics. |
+
+## Debug viewer
+
+The viewer is optional. It generates a static HTML snapshot of the current vault:
+
+```powershell
+sincron-brain viewer
+```
+
+By default it writes:
+
+```text
+memory/_viewer.html
+```
+
+Open that file in a browser to inspect memories, sleeps, audit events, queues,
+Major Tags, tags, scores, emotional floors, and `go_deeper` links. The viewer is
+a snapshot for debugging; it is not required for the MCP server to work.
 
 ## Scoring model
 

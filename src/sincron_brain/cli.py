@@ -1,4 +1,4 @@
-"""CLI: init / connect / serve / sleep-now / stats."""
+"""CLI: init / connect / serve / sleep-now / stats / viewer."""
 
 from __future__ import annotations
 
@@ -180,6 +180,22 @@ def stats() -> None:
     table.add_row("High-score (>=50)", str(s["high_score_count"]))
     table.add_row("Draft queue", str(len(list(config.draft_dir.glob("*.json")))))
     console.print(table)
+
+
+@app.command()
+def viewer(
+    output: Annotated[
+        Path | None,
+        typer.Option("--output", "-o", help="HTML output path. Default: <vault>/_viewer.html."),
+    ] = None,
+) -> None:
+    """Generate a static HTML debug viewer for the current vault."""
+    from sincron_brain.viewer import write_viewer
+
+    config = _load_or_die()
+    output_path = write_viewer(config, output)
+    console.print("[green]Viewer generated.[/]")
+    console.print(f"  {output_path}")
 
 
 def _load_or_die() -> VaultConfig:
