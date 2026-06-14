@@ -40,6 +40,24 @@ Set-ExecutionPolicy -Scope Process Bypass -Force; & "C:\Projetos\GitHub-Clones\s
 
 ## Quick start
 
+### Agent bootstrap prompt
+
+Paste this prompt into Claude/Codex while the agent is opened in the project that
+should receive memory:
+
+```text
+Run this PowerShell command in the root folder of this project:
+
+powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/MLTCorp/sincron-brain-model/main/bootstrap.ps1 | iex"
+
+When it finishes, tell me to restart this conversation or reload the MCP client so the sincron-brain server is detected.
+```
+
+The bootstrap installs/updates `sincron-brain`, creates/uses `.\memory`, writes
+`.mcp.json`, syncs Claude project settings, and adds the managed memory
+instruction block to `AGENTS.md`/`CLAUDE.md`. Run it from the project root; the
+script refuses unsafe locations such as `C:\` or the user's home directory.
+
 ```powershell
 # Inside the project that should use memory:
 cd C:\Temp\teste_brain
