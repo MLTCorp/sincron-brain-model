@@ -32,14 +32,14 @@ function Test-UnsafeProjectDirectory {
 }
 
 function Find-SincronBrainCommand {
-    $command = Get-Command "sincron-brain" -ErrorAction SilentlyContinue
-    if ($command) {
-        return $command.Source
-    }
-
     $expected = Join-Path $LocalBin "sincron-brain.exe"
     if (Test-Path -LiteralPath $expected) {
         return $expected
+    }
+
+    $command = Get-Command "sincron-brain" -ErrorAction SilentlyContinue
+    if ($command) {
+        return $command.Source
     }
 
     return $null

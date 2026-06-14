@@ -139,6 +139,15 @@ function Install-CommandShim {
     }
 
     $shimPath = Join-Path $shimDir "$CommandName.cmd"
+    if (
+        [System.IO.Path]::GetFullPath($shimPath).Equals(
+            [System.IO.Path]::GetFullPath($TargetExe),
+            [System.StringComparison]::OrdinalIgnoreCase
+        )
+    ) {
+        return $null
+    }
+
     $shimBody = "@echo off`r`n`"$TargetExe`" %*`r`n"
     Set-Content -LiteralPath $shimPath -Value $shimBody -Encoding ASCII -Force
     return $shimPath
@@ -200,11 +209,13 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Add-PathForSessionAndUser $LocalBin
-$sincronBrain = Find-CommandPath "sincron-brain"
 $expectedSincronBrain = Join-Path $LocalBin "sincron-brain.exe"
-
-if (-not $sincronBrain -and (Test-Path -LiteralPath $expectedSincronBrain)) {
+$sincronBrain = $null
+if (Test-Path -LiteralPath $expectedSincronBrain) {
     $sincronBrain = $expectedSincronBrain
+}
+if (-not $sincronBrain) {
+    $sincronBrain = Find-CommandPath "sincron-brain"
 }
 
 $shim = $null
