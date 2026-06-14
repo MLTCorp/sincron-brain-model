@@ -48,7 +48,7 @@ should receive memory:
 ```text
 Run this PowerShell command in the root folder of this project:
 
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $tmp = Join-Path $env:TEMP ('sincron-brain-bootstrap-' + [guid]::NewGuid()); git clone --depth 1 https://github.com/MLTCorp/sincron-brain-model.git $tmp; & (Join-Path $tmp 'bootstrap.ps1')"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "`$ErrorActionPreference='Stop'; `$tmp = Join-Path `$env:TEMP ('sincron-brain-bootstrap-' + [guid]::NewGuid()); git clone --depth 1 https://github.com/MLTCorp/sincron-brain-model.git `$tmp; & (Join-Path `$tmp 'bootstrap.ps1')"
 
 When it finishes, tell me to restart this conversation or reload the MCP client so the sincron-brain server is detected.
 ```
