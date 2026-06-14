@@ -48,7 +48,7 @@ should receive memory:
 ```text
 Run this PowerShell command in the root folder of this project:
 
-powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/MLTCorp/sincron-brain-model/main/bootstrap.ps1 | iex"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $tmp = Join-Path $env:TEMP ('sincron-brain-bootstrap-' + [guid]::NewGuid()); git clone --depth 1 https://github.com/MLTCorp/sincron-brain-model.git $tmp; & (Join-Path $tmp 'bootstrap.ps1')"
 
 When it finishes, tell me to restart this conversation or reload the MCP client so the sincron-brain server is detected.
 ```
@@ -57,6 +57,8 @@ The bootstrap installs/updates `sincron-brain`, creates/uses `.\memory`, writes
 `.mcp.json`, syncs Claude project settings, and adds the managed memory
 instruction block to `AGENTS.md`/`CLAUDE.md`. Run it from the project root; the
 script refuses unsafe locations such as `C:\` or the user's home directory.
+Using `git clone` keeps the command compatible with private repositories when
+the user already has GitHub credentials configured for Git.
 
 ```powershell
 # Inside the project that should use memory:

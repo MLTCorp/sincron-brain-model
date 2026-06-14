@@ -58,6 +58,19 @@ function Resolve-VaultFullPath {
     return [System.IO.Path]::GetFullPath((Join-Path $ProjectDirectory $VaultPathValue))
 }
 
+function Install-SincronBrain {
+    $scriptPath = $PSCommandPath
+    if ($scriptPath) {
+        $localInstall = Join-Path (Split-Path -Parent $scriptPath) "install.ps1"
+        if (Test-Path -LiteralPath $localInstall) {
+            & $localInstall
+            return
+        }
+    }
+
+    Invoke-RestMethod $InstallUrl | Invoke-Expression
+}
+
 $projectFullPath = Resolve-ExistingDirectory $ProjectPath
 if (Test-UnsafeProjectDirectory $projectFullPath) {
     throw "Run this bootstrap inside a project folder, not in '$projectFullPath'. Example: cd C:\Temp\my-project"
@@ -70,7 +83,7 @@ Write-Host "Vault:   $VaultPath"
 Write-Host ""
 
 Write-Host "Installing/updating sincron-brain..."
-Invoke-RestMethod $InstallUrl | Invoke-Expression
+Install-SincronBrain
 
 $sincronBrain = Find-SincronBrainCommand
 if (-not $sincronBrain) {
