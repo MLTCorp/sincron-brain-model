@@ -476,6 +476,80 @@ def render_viewer_html(data: dict[str, Any]) -> str:
       font-size: 12px;
       color: var(--stone);
     }}
+    .link-pill {{
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      color: var(--brand-blue);
+      cursor: pointer;
+    }}
+    .link-pill:hover {{
+      border-color: rgba(237, 94, 10, 0.42);
+      color: var(--ember-500);
+    }}
+    .relation-grid {{
+      display: grid;
+      grid-template-columns: minmax(360px, 1fr) minmax(420px, 0.9fr);
+      gap: 18px;
+      align-items: start;
+    }}
+    .relation-list {{ display: grid; gap: 12px; }}
+    .relation-card {{
+      border: 1px solid var(--line);
+      border-radius: var(--radius-card);
+      background: var(--panel);
+      padding: 14px;
+      box-shadow: 0 12px 28px rgba(14, 15, 18, 0.05);
+    }}
+    .relation-card.selected {{
+      border-color: rgba(237, 94, 10, 0.45);
+      background: rgba(251, 230, 214, 0.3);
+    }}
+    .relation-card-head {{
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: start;
+      margin-bottom: 10px;
+    }}
+    .relation-title {{
+      border: 0;
+      background: transparent;
+      padding: 0;
+      text-align: left;
+      color: var(--ink-soft);
+      font-family: "Plus Jakarta Sans", sans-serif;
+      font-size: 14px;
+      line-height: 1.35;
+      font-weight: 700;
+    }}
+    .relation-title:hover {{ color: var(--ember-500); }}
+    .relation-count {{
+      white-space: nowrap;
+      border: 1px solid rgba(237, 94, 10, 0.24);
+      border-radius: 999px;
+      padding: 4px 8px;
+      color: var(--ember-500);
+      background: rgba(251, 230, 214, 0.42);
+      font-family: "Sora", sans-serif;
+      font-size: 11px;
+      font-weight: 700;
+    }}
+    .relation-section {{
+      display: grid;
+      gap: 6px;
+      padding-top: 9px;
+      border-top: 1px solid rgba(197, 198, 203, 0.54);
+      margin-top: 9px;
+    }}
+    .relation-section-label {{
+      color: var(--stone);
+      font-family: "Sora", sans-serif;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }}
     .detail, .panel {{
       border: 1px solid var(--line);
       background: var(--panel);
@@ -574,6 +648,36 @@ def render_viewer_html(data: dict[str, Any]) -> str:
       overflow: hidden;
       box-shadow: 0 12px 32px rgba(14, 15, 18, 0.05);
     }}
+    .graph-group {{
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      border-left: 1px solid rgba(15, 71, 97, 0.12);
+      border-right: 1px solid rgba(15, 71, 97, 0.08);
+      background: rgba(255, 255, 255, 0.14);
+      pointer-events: none;
+    }}
+    .graph-group b {{
+      position: absolute;
+      top: 12px;
+      left: 10px;
+      right: 10px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--brand-blue);
+      font-family: "Sora", sans-serif;
+      font-size: 10px;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+    }}
+    .graph-group span {{
+      position: absolute;
+      top: 30px;
+      left: 10px;
+      color: var(--stone);
+      font-size: 11px;
+    }}
     .surface-band {{
       position: absolute;
       left: 0;
@@ -623,7 +727,7 @@ def render_viewer_html(data: dict[str, Any]) -> str:
     .graph-label {{
       position: absolute;
       transform: translate(-50%, 12px);
-      width: 154px;
+      width: 132px;
       text-align: center;
       color: var(--graphite);
       font-size: 11px;
@@ -655,7 +759,7 @@ def render_viewer_html(data: dict[str, Any]) -> str:
       }}
       .app {{ grid-template-columns: 1fr; }}
       aside {{ border-right: 0; border-bottom: 1px solid var(--line); }}
-      .grid, .meta {{ grid-template-columns: 1fr; }}
+      .grid, .meta, .relation-grid {{ grid-template-columns: 1fr; }}
     }}
   </style>
 </head>
@@ -686,6 +790,7 @@ def render_viewer_html(data: dict[str, Any]) -> str:
   <main>
     <div class="tabs">
       <button data-tab="memories" class="active">Memórias</button>
+      <button data-tab="go-deeper">Go deeper</button>
       <button data-tab="tags">Tags</button>
       <button data-tab="sleeps">Sleeps</button>
       <button data-tab="graph">Grafo</button>
@@ -693,6 +798,7 @@ def render_viewer_html(data: dict[str, Any]) -> str:
       <button data-tab="audit">Audit</button>
     </div>
     <section id="tab-memories" class="tab"></section>
+    <section id="tab-go-deeper" class="tab hidden"></section>
     <section id="tab-tags" class="tab hidden"></section>
     <section id="tab-sleeps" class="tab hidden"></section>
     <section id="tab-graph" class="tab hidden"></section>
@@ -705,6 +811,7 @@ def render_viewer_html(data: dict[str, Any]) -> str:
 const DATA = JSON.parse(document.getElementById('viewer-data').textContent);
 const byId = Object.fromEntries(DATA.memories.map(m => [m.id, m]));
 let selectedId = DATA.memories[0]?.id || null;
+let activeTab = 'memories';
 const fmt = value => value === null || value === undefined || value === '' ? '-' : String(value);
 const esc = value => fmt(value).replace(/[&<>"']/g, ch => ({{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}}[ch]));
 function shortId(id) {{ return id.length > 34 ? id.slice(0, 31) + '...' : id; }}
@@ -735,13 +842,14 @@ function init() {{
   const tagFilter = document.getElementById('tagFilter');
   tagFilter.innerHTML = '<option value="">Todas</option>' + DATA.major_tags.map(t => `<option>${{esc(t.major_tag)}}</option>`).join('');
   ['search','tagFilter','scoreFilter'].forEach(id => document.getElementById(id).addEventListener('input', () => {{
-    renderMemories();
-    renderGraphVisual();
+    renderAll();
+    showTab(activeTab);
   }}));
   document.querySelectorAll('[data-tab]').forEach(btn => btn.addEventListener('click', () => showTab(btn.dataset.tab)));
   renderAll();
 }}
 function showTab(tab) {{
+  activeTab = tab;
   document.querySelectorAll('[data-tab]').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));
   document.querySelectorAll('.tab').forEach(el => el.classList.add('hidden'));
   document.getElementById('tab-' + tab).classList.remove('hidden');
@@ -752,7 +860,7 @@ function filteredMemories() {{
   const minScore = Number(document.getElementById('scoreFilter').value || 0);
   return DATA.memories.filter(m => {{
     const text = [m.id, m.synopsis, m.content, m.source_type, ...(m.major_tags || []), ...(m.tags || [])].join(' ').toLowerCase();
-    return (!q || text.includes(q)) && (!tag || m.major_tags.includes(tag)) && m.score >= minScore;
+    return (!q || text.includes(q)) && (!tag || (m.major_tags || []).includes(tag)) && Number(m.score || 0) >= minScore;
   }});
 }}
 function renderMemories() {{
@@ -772,11 +880,31 @@ function renderMemories() {{
   document.querySelectorAll('[data-memory-id]').forEach(row => {{
     row.addEventListener('click', () => selectMemory(row.dataset.memoryId));
   }});
+  bindMemoryLinks();
 }}
-function selectMemory(id) {{ selectedId = id; renderMemories(); }}
+function selectMemory(id) {{
+  selectedId = id;
+  renderAll();
+  showTab(activeTab);
+}}
+function bindMemoryLinks() {{
+  document.querySelectorAll('[data-open-memory]').forEach(el => {{
+    if (el.dataset.boundMemoryLink) return;
+    el.dataset.boundMemoryLink = 'true';
+    el.addEventListener('click', event => {{
+      event.stopPropagation();
+      selectMemory(el.dataset.openMemory);
+    }});
+  }});
+}}
+function memoryChip(id) {{
+  const memory = byId[id];
+  if (!memory) return `<span class="pill">${{esc(shortId(id))}}</span>`;
+  return `<button class="pill link-pill" data-open-memory="${{esc(id)}}" title="${{esc(memory.synopsis || id)}}">${{esc(memory.synopsis || shortId(id))}}</button>`;
+}}
 function renderMemoryDetail(m) {{
   if (!m) return '<div class="detail">Selecione uma memória.</div>';
-  const go = (m.go_deeper || []).map(id => `<span class="pill">${{esc(id)}}</span>`).join('') || '<span class="muted">Sem links</span>';
+  const go = (m.go_deeper || []).map(id => memoryChip(id)).join('') || '<span class="muted">Sem links</span>';
   const content = m.content_omitted ? '<span class="muted">Conteúdo omitido neste snapshot. Gere novamente sem --summary-only para incluir os corpos das memórias.</span>' : esc(m.content);
   return `<div class="detail">
     <h2>${{esc(m.synopsis || m.id)}}</h2>
@@ -794,11 +922,96 @@ function renderMemoryDetail(m) {{
     <h3>Conteúdo</h3><div class="content">${{content}}</div>
   </div>`;
 }}
+function filteredEdges(limitIds = null) {{
+  const ids = limitIds || new Set(filteredMemories().map(m => m.id));
+  return DATA.go_deeper_edges.filter(e => ids.has(e.from) && ids.has(e.to));
+}}
+function renderGoDeeper() {{
+  const memories = filteredMemories();
+  const visibleIds = new Set(memories.map(m => m.id));
+  const edges = filteredEdges(visibleIds);
+  const outgoing = new Map();
+  const incoming = new Map();
+  edges.forEach(e => {{
+    if (!outgoing.has(e.from)) outgoing.set(e.from, []);
+    if (!incoming.has(e.to)) incoming.set(e.to, []);
+    outgoing.get(e.from).push(e.to);
+    incoming.get(e.to).push(e.from);
+  }});
+  const hubs = memories
+    .map(m => ({{ memory: m, outgoing: outgoing.get(m.id) || [], incoming: incoming.get(m.id) || [] }}))
+    .filter(item => item.outgoing.length || item.incoming.length)
+    .sort((a, b) => (b.outgoing.length + b.incoming.length) - (a.outgoing.length + a.incoming.length) || b.memory.score - a.memory.score);
+  const cards = hubs.map(item => {{
+    const m = item.memory;
+    const total = item.outgoing.length + item.incoming.length;
+    const out = item.outgoing.map(memoryChip).join('') || '<span class="muted">Nenhuma saída filtrada.</span>';
+    const inc = item.incoming.map(memoryChip).join('') || '<span class="muted">Nenhuma entrada filtrada.</span>';
+    return `
+      <div class="relation-card ${{m.id === selectedId ? 'selected' : ''}}">
+        <div class="relation-card-head">
+          <button class="relation-title" data-open-memory="${{esc(m.id)}}">${{esc(m.synopsis || m.id)}}</button>
+          <span class="relation-count">${{total}} links</span>
+        </div>
+        <div class="muted">${{esc(shortId(m.id))}} · score ${{m.score}} · ${{(m.major_tags || []).map(esc).join(', ') || 'sem-major-tag'}}</div>
+        <div class="relation-section">
+          <span class="relation-section-label">Abre para</span>
+          <div class="pillbar">${{out}}</div>
+        </div>
+        <div class="relation-section">
+          <span class="relation-section-label">Recebe de</span>
+          <div class="pillbar">${{inc}}</div>
+        </div>
+      </div>`;
+  }}).join('') || '<div class="panel">Nenhuma relação go_deeper encontrada no escopo dos filtros.</div>';
+  const selected = byId[selectedId] && visibleIds.has(selectedId) ? byId[selectedId] : null;
+  document.getElementById('tab-go-deeper').innerHTML = `
+    <div class="relation-grid">
+      <div>
+        <div class="panel graph-head">
+          <div>
+            <h2>Go deeper</h2>
+            <p class="muted">Memórias agrupadas como hubs: cada card mostra todas as saídas e entradas visíveis dentro dos filtros atuais.</p>
+          </div>
+          <div class="graph-legend">
+            <span class="legend-item">${{memories.length}} memórias</span>
+            <span class="legend-item">${{edges.length}} links filtrados</span>
+          </div>
+        </div>
+        <div class="relation-list">${{cards}}</div>
+      </div>
+      ${{renderMemoryDetail(selected)}}
+    </div>`;
+  bindMemoryLinks();
+}}
+function aggregateMajorTags(memories) {{
+  const rows = new Map();
+  memories.forEach(m => (m.major_tags || ['sem-major-tag']).forEach(tag => {{
+    const row = rows.get(tag) || {{ major_tag: tag, count: 0, max_score: 0, total_score: 0 }};
+    const score = Number(m.score || 0);
+    row.count += 1;
+    row.max_score = Math.max(row.max_score, score);
+    row.total_score += score;
+    rows.set(tag, row);
+  }}));
+  return [...rows.values()].map(row => ({{
+    major_tag: row.major_tag,
+    count: row.count,
+    max_score: Math.round(row.max_score),
+    avg_score: Math.round((row.total_score / row.count) * 10) / 10,
+  }})).sort((a, b) => b.count - a.count || a.major_tag.localeCompare(b.major_tag));
+}}
+function aggregateTags(memories) {{
+  const rows = new Map();
+  memories.forEach(m => (m.tags || []).forEach(tag => rows.set(tag, (rows.get(tag) || 0) + 1)));
+  return [...rows.entries()].map(([tag, count]) => ({{ tag, count }})).sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
+}}
 function renderTags() {{
+  const memories = filteredMemories();
   document.getElementById('tab-tags').innerHTML = `
     <div class="grid">
-      <div class="panel"><h2>Major tags</h2>${{table(DATA.major_tags, ['major_tag','count','max_score','avg_score'])}}</div>
-      <div class="panel"><h2>Tags no vault</h2>${{table(DATA.tags, ['tag','count'])}}</div>
+      <div class="panel"><h2>Major tags</h2>${{table(aggregateMajorTags(memories), ['major_tag','count','max_score','avg_score'])}}</div>
+      <div class="panel"><h2>Tags no filtro</h2>${{table(aggregateTags(memories), ['tag','count'])}}</div>
     </div>`;
 }}
 function renderSleeps() {{
@@ -827,26 +1040,42 @@ function renderGraphVisual() {{
   const allFiltered = filteredMemories();
   const memories = allFiltered.slice(0, 220);
   const visibleIds = new Set(memories.map(m => m.id));
-  const edges = DATA.go_deeper_edges.filter(e => visibleIds.has(e.from) && visibleIds.has(e.to));
+  const edges = filteredEdges(visibleIds);
   if (!memories.length) {{
     document.getElementById('tab-graph').innerHTML = '<div class="panel graph-empty"><p class="muted">Nenhuma memória encontrada para desenhar o grafo.</p></div>';
     return;
   }}
   const width = 1060;
   const height = 680;
-  const padX = 82;
-  const padY = 62;
+  const padX = 54;
+  const padY = 88;
   const groups = [...new Set(memories.map(m => (m.major_tags && m.major_tags[0]) || 'sem-major-tag'))];
+  const groupWidth = (width - padX * 2) / Math.max(groups.length, 1);
   const positions = new Map();
-  memories.forEach((m, index) => {{
-    const groupIndex = groups.indexOf((m.major_tags && m.major_tags[0]) || 'sem-major-tag');
-    const groupWidth = (width - padX * 2) / Math.max(groups.length, 1);
-    const baseX = padX + groupWidth * (groupIndex + 0.5);
-    const wave = Math.sin((index + 1) * 1.91) * Math.min(52, groupWidth * 0.32);
-    const score = Math.max(0, Math.min(100, Number(m.score || 0)));
-    const y = padY + ((100 - score) / 100) * (height - padY * 2);
-    positions.set(m.id, {{ x: Math.max(38, Math.min(width - 38, baseX + wave)), y, score }});
+  const byGroup = new Map(groups.map(group => [group, []]));
+  memories.forEach(m => byGroup.get((m.major_tags && m.major_tags[0]) || 'sem-major-tag').push(m));
+  groups.forEach((group, groupIndex) => {{
+    const groupMemories = byGroup.get(group).sort((a, b) => Number(b.score || 0) - Number(a.score || 0));
+    const left = padX + groupWidth * groupIndex;
+    const center = left + groupWidth / 2;
+    groupMemories.forEach((m, index) => {{
+      const score = Math.max(0, Math.min(100, Number(m.score || 0)));
+      const columns = groupWidth > 140 ? 3 : groupWidth > 88 ? 2 : 1;
+      const column = index % columns;
+      const row = Math.floor(index / columns);
+      const rows = Math.max(1, Math.ceil(groupMemories.length / columns));
+      const spread = Math.min(groupWidth * 0.28, 42);
+      const x = center + (column - (columns - 1) / 2) * spread;
+      const y = padY + ((row + 0.6) / Math.max(rows, 1)) * (height - padY - 74);
+      positions.set(m.id, {{ x: Math.max(34, Math.min(width - 34, x)), y, score }});
+    }});
   }});
+  const groupGuides = groups.map((group, index) => {{
+    const left = ((padX + groupWidth * index) / width) * 100;
+    const w = (groupWidth / width) * 100;
+    const count = byGroup.get(group).length;
+    return `<div class="graph-group" style="left:${{left}}%; width:${{w}}%;"><b>${{esc(group)}}</b><span>${{count}} memórias</span></div>`;
+  }}).join('');
   const lines = edges.map(e => {{
     const a = positions.get(e.from);
     const b = positions.get(e.to);
@@ -868,14 +1097,12 @@ function renderGraphVisual() {{
       <div class="graph-label" style="left:${{(pos.x / width) * 100}}%; top:${{(pos.y / height) * 100}}%;">${{label}}</div>`;
   }}).join('');
   const bands = [
-    ['Superfície', 100],
-    ['Alta relevância', 75],
-    ['Média', 50],
-    ['Profunda', 25],
-    ['Fundo', 0],
-  ].map(([label, score]) => {{
-    const y = padY + ((100 - score) / 100) * (height - padY * 2);
-    return `<div class="surface-band" style="top:${{(y / height) * 100}}%">${{label}} · score ${{score}}</div>`;
+    ['Mais relevantes', 0],
+    ['Meio do grupo', 50],
+    ['Menos relevantes', 100],
+  ].map(([label, pct]) => {{
+    const y = padY + (pct / 100) * (height - padY - 74);
+    return `<div class="surface-band" style="top:${{(y / height) * 100}}%">${{label}}</div>`;
   }}).join('');
   const hidden = allFiltered.length > memories.length ? `<p class="muted">Mostrando as primeiras ${{memories.length}} memórias filtradas para preservar a fluidez do HTML.</p>` : '';
   document.getElementById('tab-graph').innerHTML = `
@@ -883,7 +1110,7 @@ function renderGraphVisual() {{
       <div class="panel graph-head">
         <div>
           <h2>Grafo de memórias</h2>
-          <p class="muted">Cada nó é uma memória. Quanto mais alto, mais perto da superfície de acesso. As linhas indicam conexões <code>go_deeper</code>.</p>
+          <p class="muted">Cada coluna é uma Major Tag. Dentro da coluna, memórias mais relevantes aparecem primeiro; linhas indicam conexões <code>go_deeper</code> dentro do escopo filtrado.</p>
           ${{hidden}}
         </div>
         <div class="graph-legend">
@@ -894,6 +1121,7 @@ function renderGraphVisual() {{
         </div>
       </div>
       <div class="graph-stage">
+        ${{groupGuides}}
         ${{bands}}
         <svg class="graph-svg" viewBox="0 0 ${{width}} ${{height}}" preserveAspectRatio="none" aria-hidden="true">
           <defs>
@@ -908,9 +1136,7 @@ function renderGraphVisual() {{
     </div>`;
   document.querySelectorAll('[data-graph-id]').forEach(node => {{
     node.addEventListener('click', () => {{
-      selectedId = node.dataset.graphId;
-      renderMemories();
-      renderGraphVisual();
+      selectMemory(node.dataset.graphId);
     }});
   }});
 }}
@@ -931,6 +1157,7 @@ function table(rows, keys) {{
 }}
 function renderAll() {{
   renderMemories();
+  renderGoDeeper();
   renderTags();
   renderSleeps();
   renderGraphVisual();
