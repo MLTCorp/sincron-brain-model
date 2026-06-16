@@ -266,7 +266,7 @@ Quando o cron dispara (default 03:00) ou `sleep_now()` é chamado:
 
 ## Base teórica — "A arte de esquecer" (Izquierdo et al.)
 
-Arquivo: [`docs/zeluiz,+22.pdf`](docs/zeluiz,+22.pdf) — Iván Izquierdo, Lia R. M. Bevilaqua e Martín Cammarota, *Estudos Avançados* 20 (58), 2006.
+Referência: Iván Izquierdo, Lia R. M. Bevilaqua e Martín Cammarota, *A arte de esquecer*, Estudos Avançados 20 (58), 2006.
 
 **Consulte este artigo sempre que for analisar ou decidir qualquer coisa sobre scoring, decaimento, esquecimento, consolidação, peso emocional ou granularidade de memória.** Ele é a fundamentação neurocientífica do nosso modelo cognitivo e já se mostrou útil em várias decisões.
 
@@ -291,4 +291,4 @@ Resumo operacional (o que mapeia pro nosso design):
 - **Custo de operação importa.** Cada decisão de design avalia o gasto de token no sono e no uso normal.
 - **Plug-and-play de verdade.** Instalação tem que ser: 1 comando + colar config MCP + 1 chave de API. Se ficar mais complexo, voltar pra prancheta.
 - **Sem comentários óbvios no código.** O nome das coisas explica. Comentário só pra o "porquê" não-óbvio.
-- **Consultar a base teórica.** Antes de mexer em scoring/decaimento/esquecimento/consolidação/emoção, reler o resumo de "A arte de esquecer" (seção acima) e, se necessário, o PDF em `docs/`.
+- **Consultar a base teórica.** Antes de mexer em scoring/decaimento/esquecimento/consolidação/emoção, reler o resumo de "A arte de esquecer" (seção acima) e consultar a fonte acadêmica externamente quando necessário.

@@ -35,7 +35,7 @@ If the repository is private, the raw GitHub URL returns `404`. In that case,
 run the checked-out installer directly from this repository:
 
 ```powershell
-Set-ExecutionPolicy -Scope Process Bypass -Force; & "C:\Projetos\GitHub-Clones\sincron-brain-model\install.ps1"
+Set-ExecutionPolicy -Scope Process Bypass -Force; & ".\install.ps1"
 ```
 
 ## Quick start
@@ -62,13 +62,13 @@ the user already has GitHub credentials configured for Git.
 
 ```powershell
 # Inside the project that should use memory:
-cd C:\Temp\teste_brain
+cd C:\Projects\my-agent-project
 
 # Create/use the vault and generate .mcp.json for this project.
 sincron-brain connect --path .\memory
 
 # Export the API key for your judge provider (matches the prompt choice)
-$env:ANTHROPIC_API_KEY = "sk-ant-..."
+$env:ANTHROPIC_API_KEY = "<your-anthropic-api-key>"
 
 # (Optional) verify it works
 sincron-brain stats
@@ -95,7 +95,7 @@ conversation turns with `remember_turn()`.
       "command": "sincron-brain",
       "args": ["serve"],
       "env": {
-        "SINCRON_BRAIN_VAULT": "C:\\Temp\\teste_brain\\memory"
+        "SINCRON_BRAIN_VAULT": "C:\\Projects\\my-agent-project\\memory"
       }
     }
   }
@@ -142,7 +142,7 @@ into that client's MCP settings:
       "args": ["serve"],
       "env": {
         "SINCRON_BRAIN_VAULT": "/absolute/path/to/your/memory",
-        "ANTHROPIC_API_KEY": "sk-ant-..."
+        "ANTHROPIC_API_KEY": "<your-anthropic-api-key>"
       }
     }
   }

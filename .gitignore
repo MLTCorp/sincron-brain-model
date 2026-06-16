@@ -45,6 +45,10 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
+# Local audit/output artifacts
+security-*-report.md
+devlog-*.zip
+
 # Vault de teste local
 .vault/
 memory/
