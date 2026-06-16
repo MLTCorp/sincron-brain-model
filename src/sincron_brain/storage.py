@@ -7,6 +7,7 @@ gets corrupted, run `sincron-brain reindex` to rebuild from the .md files.
 from __future__ import annotations
 
 import json
+import os
 import re
 import sqlite3
 import time
@@ -15,6 +16,7 @@ import uuid
 from collections.abc import Iterable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any, cast
 
 import frontmatter
 
@@ -61,19 +63,21 @@ AUDIT_PRUNE_INTERVAL_SECONDS = 60.0
 _AUDIT_LAST_PRUNED: dict[Path, float] = {}
 
 
-def write_audit(config: VaultConfig, event: str, **payload) -> Path | None:
+def write_audit(config: VaultConfig, event: str, **payload: Any) -> Path | None:
     """Append a safe JSONL audit event. Never log full memory/user content."""
     if not config.audit.enabled:
         return None
     config.vault_path.mkdir(parents=True, exist_ok=True)
     _prune_audit_if_due(config)
-    row = {
+    clean_payload = cast(dict[str, Any], _sanitize_audit(payload))
+    row: dict[str, Any] = {
         "ts": _utcnow_iso(),
         "event": event,
-        **_sanitize_audit(payload),
+        **clean_payload,
     }
     with config.audit_file.open("a", encoding="utf-8") as f:
         f.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+    _restrict_owner_access(config.audit_file)
     return config.audit_file
 
 
@@ -99,7 +103,7 @@ def read_audit(config: VaultConfig) -> list[dict]:
     ]
 
 
-def _sanitize_audit(value):
+def _sanitize_audit(value: Any) -> Any:
     if isinstance(value, dict):
         clean = {}
         for key, item in value.items():
@@ -127,6 +131,7 @@ def _prune_audit(config: VaultConfig) -> None:
     lines = _retain_recent_audit_lines(lines, config.audit.retention_days)
     lines = _retain_audit_size(lines, config.audit.max_file_mb)
     config.audit_file.write_text(_join_jsonl(lines), encoding="utf-8")
+    _restrict_owner_access(config.audit_file)
 
 
 def _retain_recent_audit_lines(lines: list[str], retention_days: int) -> list[str]:
@@ -179,6 +184,9 @@ def ensure_vault(config: VaultConfig) -> None:
     config.vault_path.mkdir(parents=True, exist_ok=True)
     config.draft_dir.mkdir(exist_ok=True)
     config.reactivation_dir.mkdir(exist_ok=True)
+    _restrict_owner_access(config.vault_path, directory=True)
+    _restrict_owner_access(config.draft_dir, directory=True)
+    _restrict_owner_access(config.reactivation_dir, directory=True)
 
 
 def open_db(config: VaultConfig) -> sqlite3.Connection:
@@ -188,6 +196,7 @@ def open_db(config: VaultConfig) -> sqlite3.Connection:
     conn.executescript(SCHEMA)
     _ensure_columns(conn)
     conn.commit()
+    _restrict_owner_access(config.index_db)
     return conn
 
 
@@ -214,6 +223,7 @@ def write_memory(config: VaultConfig, memory: Memory, conn: sqlite3.Connection) 
 
     post = frontmatter.Post(content=memory.content, **memory.frontmatter())
     file_path.write_bytes(frontmatter.dumps(post).encode("utf-8"))
+    _restrict_owner_access(file_path)
 
     conn.execute(
         """
@@ -274,11 +284,12 @@ def write_memory(config: VaultConfig, memory: Memory, conn: sqlite3.Connection) 
 def read_memory_file(path: Path) -> Memory:
     """Parse a .md file back into a Memory model."""
     post = frontmatter.load(path)
-    meta = post.metadata
+    meta: dict[str, Any] = dict(post.metadata)
+    asset_ref = meta.get("asset_ref")
     return Memory(
-        id=meta["id"],
-        major_tags=list(meta.get("major_tags") or []),
-        tags=list(meta.get("tags") or []),
+        id=str(meta["id"]),
+        major_tags=_string_list(meta.get("major_tags")),
+        tags=_string_list(meta.get("tags")),
         score=int(meta.get("score", 100)),
         created=_parse_dt(meta.get("created")),
         last_accessed=_parse_dt(meta.get("last_accessed")),
@@ -286,11 +297,21 @@ def read_memory_file(path: Path) -> Memory:
         access_count=int(meta.get("access_count", 0)),
         emotion_floor=int(meta.get("emotion_floor", 0)),
         source_type=str(meta.get("source_type", "text")),
-        asset_ref=meta.get("asset_ref"),
-        go_deeper=list(meta.get("go_deeper") or []),
+        asset_ref=str(asset_ref) if asset_ref is not None else None,
+        go_deeper=_string_list(meta.get("go_deeper")),
         synopsis=str(meta.get("synopsis", "")),
         content=post.content,
     )
+
+
+def _string_list(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [str(item) for item in value]
+    if isinstance(value, tuple):
+        return [str(item) for item in value]
+    return [str(value)]
 
 
 def get_memory(config: VaultConfig, conn: sqlite3.Connection, memory_id: str) -> Memory | None:
@@ -491,6 +512,7 @@ def write_draft(config: VaultConfig, item: DraftItem) -> Path:
     config.draft_dir.mkdir(exist_ok=True)
     path = config.draft_dir / f"{item.timestamp.strftime('%Y%m%d-%H%M%S')}-{item.id}.json"
     path.write_text(item.model_dump_json(indent=2), encoding="utf-8")
+    _restrict_owner_access(path)
     return path
 
 
@@ -505,6 +527,7 @@ def write_reactivation(config: VaultConfig, event: ReactivationEvent) -> Path:
     config.reactivation_dir.mkdir(exist_ok=True)
     path = config.reactivation_dir / f"{event.timestamp.strftime('%Y%m%d-%H%M%S')}-{event.id}.json"
     path.write_text(event.model_dump_json(indent=2), encoding="utf-8")
+    _restrict_owner_access(path)
     return path
 
 
@@ -551,3 +574,13 @@ def _parse_dt(value) -> datetime:
     if value is None:
         return datetime.now(UTC)
     return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+
+
+def _restrict_owner_access(path: Path, directory: bool = False) -> None:
+    """Best-effort POSIX permission hardening for local memory files."""
+    if os.name != "posix":
+        return
+    try:
+        path.chmod(0o700 if directory else 0o600)
+    except OSError:
+        return

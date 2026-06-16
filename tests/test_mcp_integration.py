@@ -12,7 +12,9 @@ from sincron_brain.config import VaultConfig
 
 async def _call_text(session: ClientSession, name: str, arguments: dict | None = None):
     result = await session.call_tool(name, arguments or {})
-    return json.loads(result.content[0].text)
+    content = result.content[0]
+    assert content.type == "text"
+    return json.loads(content.text)
 
 
 @pytest.mark.asyncio

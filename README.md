@@ -20,22 +20,32 @@ See [CLAUDE.md](CLAUDE.md) for full architectural decisions.
 
 ## Install
 
-Windows / PowerShell one-command install:
+Windows / PowerShell install from a released package:
 
 ```powershell
-Set-ExecutionPolicy -Scope Process Bypass -Force; irm https://raw.githubusercontent.com/MLTCorp/sincron-brain-model/main/install.ps1 | iex
+python -m pip install uv
+uv tool install sincron-brain-model==0.1.0
+```
+
+Install from a pinned Git tag when the package is not available on PyPI yet:
+
+```powershell
+$installer = Join-Path $env:TEMP "sincron-brain-install.ps1"
+Invoke-WebRequest https://raw.githubusercontent.com/MLTCorp/sincron-brain-model/v0.1.0/install.ps1 -OutFile $installer
+powershell -NoProfile -ExecutionPolicy Bypass -File $installer -Version v0.1.0
 ```
 
 The installer is plug-and-play: it installs `uv` for the current user if needed,
-then installs the `sincron-brain` CLI from this GitHub repository, updates the
+then installs the `sincron-brain` CLI from the requested GitHub tag, updates the
 user PATH, and creates a compatibility command shim when the current terminal or
-agent has not reloaded PATH yet.
+agent has not reloaded PATH yet. Prefer a version tag over `main` for repeatable
+installs.
 
 If the repository is private, the raw GitHub URL returns `404`. In that case,
 run the checked-out installer directly from this repository:
 
 ```powershell
-Set-ExecutionPolicy -Scope Process Bypass -Force; & ".\install.ps1"
+Set-ExecutionPolicy -Scope Process Bypass -Force; & ".\install.ps1" -Version v0.1.0
 ```
 
 ## Quick start
@@ -48,7 +58,7 @@ should receive memory:
 ```text
 Run this PowerShell command in the root folder of this project:
 
-powershell -NoProfile -ExecutionPolicy Bypass -Command "`$ErrorActionPreference='Stop'; `$tmp = Join-Path `$env:TEMP ('sincron-brain-bootstrap-' + [guid]::NewGuid()); git clone --depth 1 https://github.com/MLTCorp/sincron-brain-model.git `$tmp; & (Join-Path `$tmp 'bootstrap.ps1')"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "`$ErrorActionPreference='Stop'; `$tmp = Join-Path `$env:TEMP ('sincron-brain-bootstrap-' + [guid]::NewGuid()); git clone --depth 1 --branch v0.1.0 https://github.com/MLTCorp/sincron-brain-model.git `$tmp; & (Join-Path `$tmp 'bootstrap.ps1') -Version v0.1.0"
 
 When it finishes, tell me to restart this conversation or reload the MCP client so the sincron-brain server is detected.
 ```
@@ -58,7 +68,8 @@ The bootstrap installs/updates `sincron-brain`, creates/uses `.\memory`, writes
 instruction block to `AGENTS.md`/`CLAUDE.md`. Run it from the project root; the
 script refuses unsafe locations such as `C:\` or the user's home directory.
 Using `git clone` keeps the command compatible with private repositories when
-the user already has GitHub credentials configured for Git.
+the user already has GitHub credentials configured for Git. For repeatable
+bootstraps, pass `-Version v0.1.0` to `bootstrap.ps1`.
 
 ```powershell
 # Inside the project that should use memory:
@@ -110,8 +121,19 @@ On Windows/PowerShell:
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e ".[dev]"
 .\.venv\Scripts\python.exe -m ruff check src tests
+.\.venv\Scripts\python.exe -m pyright
 .\.venv\Scripts\python.exe -m pytest
+.\.venv\Scripts\python.exe -m pip_audit
 ```
+
+## Release
+
+Releases are built and published from GitHub Actions on tags matching
+`vX.Y.Z`. The release workflow checks lint, types, tests, dependency audit,
+distribution metadata, SHA256 checksums, GitHub artifact attestation, and PyPI
+Trusted Publishing.
+
+See [docs/release.md](docs/release.md).
 
 If Python was installed through Microsoft Store and `python` is not on PATH yet,
 use the Store alias directly:
@@ -181,28 +203,31 @@ memory/_viewer.html
 
 Open that file in a browser to inspect memories, sleeps, audit events, queues,
 Major Tags, tags, scores, emotional floors, and `go_deeper` links. The viewer is
-a snapshot for debugging; it is not required for the MCP server to work.
+a snapshot for debugging; it is not required for the MCP server to work. By
+default, it omits full memory bodies so the generated HTML is safer to share
+inside a local debugging flow.
 
 The `Grafo` tab draws a local memory map: each node is a memory, `go_deeper`
 links are rendered as arrows, and the vertical position shows how close each
 memory is to the access surface (`score 100` at the top, lower scores deeper).
+
+When you need to inspect complete memory content, opt in explicitly:
+
+```powershell
+# Embed full memory bodies. Keep this HTML local.
+sincron-brain viewer --include-content
+```
 
 For large vaults, generate lighter snapshots:
 
 ```powershell
 # Embed only the top 1000 memories by score/recency.
 sincron-brain viewer --limit 1000
-
-# Keep memory cards and diagnostics, but omit full memory bodies.
-sincron-brain viewer --summary-only
-
-# Combine both for very large vaults.
-sincron-brain viewer --limit 1000 --summary-only
 ```
 
 The full vault statistics, Major Tag totals, common tag totals, queues, sleeps,
 and recent audit events remain visible. `--limit` only controls how many memory
-cards are embedded in the HTML; `--summary-only` controls whether full memory
+cards are embedded in the HTML; `--include-content` controls whether full memory
 bodies are embedded.
 
 ## Local benchmark

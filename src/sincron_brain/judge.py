@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from typing import Any
 
 from sincron_brain import reconcile
 from sincron_brain.config import VaultConfig
@@ -148,7 +149,7 @@ def _litellm_completion(config: VaultConfig) -> Completion:
     def complete(messages: list[dict]) -> str:
         import litellm
 
-        response = litellm.completion(
+        response: Any = litellm.completion(
             model=f"{config.judge.provider}/{config.judge.model}",
             messages=messages,
             api_key=config.judge_api_key(),

@@ -6,6 +6,7 @@ memory neutrally, queues real answer-use, and the next sleep reactivates it.
 Nothing here talks to a real LLM provider — the Decider is a deterministic stub.
 """
 
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 
 from sincron_brain import sleep, storage
@@ -20,7 +21,7 @@ def make_config(tmp_path) -> VaultConfig:
     return config
 
 
-def _stub_judge_for(major_tag: str, synopsis: str) -> callable:
+def _stub_judge_for(major_tag: str, synopsis: str) -> Callable[..., Decision]:
     def decide(_draft, _candidates):
         return Decision(
             action="create",

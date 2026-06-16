@@ -57,6 +57,8 @@ def test_build_viewer_data_includes_memory_tags_go_deeper_and_sleep(tmp_path):
     assert memories["a"]["score"] == 88
     assert memories["a"]["emotion_floor"] == 40
     assert memories["a"]["go_deeper"] == ["b"]
+    assert memories["a"]["content_omitted"] is True
+    assert memories["a"]["content"] == ""
     assert data["branding"]["logo_data_uri"].startswith("data:image/jpeg;base64,")
     assert data["branding"]["developer"] == "Sincron IA"
     assert data["branding"]["author"] == "Matheus Massari"
@@ -71,7 +73,7 @@ def test_write_viewer_outputs_self_contained_html(tmp_path):
     with storage.open_db(config) as conn:
         storage.write_memory(
             config,
-            Memory(id="a", major_tags=["debug"], synopsis="Debug", content="Conteúdo"),
+            Memory(id="a", major_tags=["debug"], synopsis="Debug", content="Debug full body"),
             conn,
         )
 
@@ -85,7 +87,8 @@ def test_write_viewer_outputs_self_contained_html(tmp_path):
     assert "Autor Matheus Massari" in html
     assert "data:image/jpeg;base64," in html
     assert "viewer-data" in html
-    assert "Conteúdo" in html
+    assert "Debug full body" not in html
+    assert "Corpos das memórias omitidos" in html
     assert 'data-tab="go-deeper"' in html
     assert "relation-grid" in html
     assert "Grafo de memórias" in html
@@ -138,6 +141,22 @@ def test_write_viewer_summary_only_omits_memory_bodies(tmp_path):
     assert "Secret body" not in html
     assert "Corpos das memórias omitidos" in html
     assert '"summary_only": true' in html
+
+
+def test_write_viewer_can_include_memory_bodies_explicitly(tmp_path):
+    config = make_config(tmp_path)
+    with storage.open_db(config) as conn:
+        storage.write_memory(
+            config,
+            Memory(id="a", major_tags=["debug"], synopsis="Debug", content="Local body"),
+            conn,
+        )
+
+    path = write_viewer(config, summary_only=False)
+    html = path.read_text(encoding="utf-8")
+
+    assert "Local body" in html
+    assert '"summary_only": false' in html
 
 
 def test_render_viewer_escapes_script_end_tag():

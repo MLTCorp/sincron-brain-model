@@ -1,12 +1,14 @@
 param(
     [string]$VaultPath = ".\memory",
     [string]$ProjectPath = ".",
+    [string]$Version = "",
     [switch]$SkipStats
 )
 
 $ErrorActionPreference = "Stop"
 
-$InstallUrl = "https://raw.githubusercontent.com/MLTCorp/sincron-brain-model/main/install.ps1"
+$InstallRef = if ([string]::IsNullOrWhiteSpace($Version)) { "main" } else { $Version }
+$InstallUrl = "https://raw.githubusercontent.com/MLTCorp/sincron-brain-model/$InstallRef/install.ps1"
 $LocalBin = Join-Path $env:USERPROFILE ".local\bin"
 
 function Resolve-ExistingDirectory {
@@ -63,12 +65,18 @@ function Install-SincronBrain {
     if ($scriptPath) {
         $localInstall = Join-Path (Split-Path -Parent $scriptPath) "install.ps1"
         if (Test-Path -LiteralPath $localInstall) {
-            & $localInstall
+            & $localInstall -Version $Version
             return
         }
     }
 
-    Invoke-RestMethod $InstallUrl | Invoke-Expression
+    $installer = Join-Path $env:TEMP ("sincron-brain-install-" + [guid]::NewGuid() + ".ps1")
+    try {
+        Invoke-WebRequest -Uri $InstallUrl -OutFile $installer -UseBasicParsing
+        & $installer -Version $Version
+    } finally {
+        Remove-Item -LiteralPath $installer -Force -ErrorAction SilentlyContinue
+    }
 }
 
 $projectFullPath = Resolve-ExistingDirectory $ProjectPath

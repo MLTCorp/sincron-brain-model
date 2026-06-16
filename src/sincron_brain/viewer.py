@@ -20,7 +20,7 @@ def write_viewer(
     config: VaultConfig,
     output: Path | None = None,
     limit: int | None = None,
-    summary_only: bool = False,
+    summary_only: bool = True,
 ) -> Path:
     """Write a self-contained HTML snapshot for debugging a vault."""
     output_path = (output or config.vault_path / VIEWER_FILENAME).expanduser().resolve()
@@ -37,7 +37,7 @@ def write_viewer(
 def build_viewer_data(
     config: VaultConfig,
     limit: int | None = None,
-    summary_only: bool = False,
+    summary_only: bool = True,
 ) -> dict[str, Any]:
     """Collect memories, tags, go_deeper edges, queues, and audit-derived sleeps."""
     if limit is not None and limit <= 0:
@@ -212,9 +212,6 @@ def render_viewer_html(data: dict[str, Any]) -> str:
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Sincron Brain Viewer</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Sora:wght@400;600;700&display=swap" rel="stylesheet">
   <style>
     :root {{
       color-scheme: light;
@@ -236,7 +233,7 @@ def render_viewer_html(data: dict[str, Any]) -> str:
       --shadow: 0 22px 60px rgba(14, 15, 18, 0.12);
       --radius-card: 18px;
       --radius-ui: 8px;
-      font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }}
     * {{ box-sizing: border-box; }}
     html {{ background: #e8e6e0; }}
@@ -280,7 +277,7 @@ def render_viewer_html(data: dict[str, Any]) -> str:
     }}
     main {{ padding: 28px; overflow: auto; }}
     h1 {{
-      font-family: "Instrument Serif", Georgia, serif;
+      font-family: Georgia, "Times New Roman", serif;
       font-size: 34px;
       font-weight: 400;
       line-height: 1;
@@ -289,7 +286,7 @@ def render_viewer_html(data: dict[str, Any]) -> str:
       letter-spacing: 0;
     }}
     h2 {{
-      font-family: "Instrument Serif", Georgia, serif;
+      font-family: Georgia, "Times New Roman", serif;
       font-size: 26px;
       font-weight: 400;
       line-height: 1.15;
@@ -297,7 +294,7 @@ def render_viewer_html(data: dict[str, Any]) -> str:
       color: var(--brand-blue);
     }}
     h3 {{
-      font-family: "Sora", sans-serif;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       font-size: 13px;
       font-weight: 700;
       margin: 18px 0 8px;
@@ -328,7 +325,7 @@ def render_viewer_html(data: dict[str, Any]) -> str:
     .brand h1 {{
       margin: 0 0 4px;
       color: #fbfaf7;
-      font-family: "Instrument Serif", Georgia, "Times New Roman", serif;
+      font-family: Georgia, "Times New Roman", serif;
       font-size: 32px;
       letter-spacing: -0.02em;
     }}
@@ -380,7 +377,7 @@ def render_viewer_html(data: dict[str, Any]) -> str:
     .stat b {{
       display: block;
       margin-top: 3px;
-      font-family: "Sora", sans-serif;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       font-size: 21px;
       color: var(--ink-soft);
     }}
@@ -424,7 +421,7 @@ def render_viewer_html(data: dict[str, Any]) -> str:
       border-radius: var(--radius-ui);
       padding: 10px 13px;
       cursor: pointer;
-      font-family: "Sora", sans-serif;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       font-size: 12px;
       font-weight: 600;
     }}
@@ -464,7 +461,7 @@ def render_viewer_html(data: dict[str, Any]) -> str:
     }}
     .score {{
       color: var(--ember-500);
-      font-family: "Sora", sans-serif;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       font-weight: 700;
     }}
     .pillbar {{ display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }}
@@ -518,7 +515,7 @@ def render_viewer_html(data: dict[str, Any]) -> str:
       padding: 0;
       text-align: left;
       color: var(--ink-soft);
-      font-family: "Plus Jakarta Sans", sans-serif;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       font-size: 14px;
       line-height: 1.35;
       font-weight: 700;
@@ -531,7 +528,7 @@ def render_viewer_html(data: dict[str, Any]) -> str:
       padding: 4px 8px;
       color: var(--ember-500);
       background: rgba(251, 230, 214, 0.42);
-      font-family: "Sora", sans-serif;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       font-size: 11px;
       font-weight: 700;
     }}
@@ -544,7 +541,7 @@ def render_viewer_html(data: dict[str, Any]) -> str:
     }}
     .relation-section-label {{
       color: var(--stone);
-      font-family: "Sora", sans-serif;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       font-size: 10px;
       font-weight: 700;
       letter-spacing: 0.06em;
@@ -597,7 +594,7 @@ def render_viewer_html(data: dict[str, Any]) -> str:
     }}
     th {{
       background: var(--fog);
-      font-family: "Sora", sans-serif;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       font-size: 11px;
       font-weight: 700;
       color: var(--brand-blue);
@@ -666,7 +663,7 @@ def render_viewer_html(data: dict[str, Any]) -> str:
       text-overflow: ellipsis;
       white-space: nowrap;
       color: var(--brand-blue);
-      font-family: "Sora", sans-serif;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       font-size: 10px;
       letter-spacing: 0.03em;
       text-transform: uppercase;
@@ -684,7 +681,7 @@ def render_viewer_html(data: dict[str, Any]) -> str:
       right: 0;
       border-top: 1px dashed rgba(110, 112, 121, 0.28);
       color: rgba(59, 61, 66, 0.72);
-      font-family: "Sora", sans-serif;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       font-size: 10px;
       font-weight: 700;
       letter-spacing: 0.06em;
@@ -712,7 +709,7 @@ def render_viewer_html(data: dict[str, Any]) -> str:
       display: grid;
       place-items: center;
       color: #fff;
-      font-family: "Sora", sans-serif;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       font-size: 10px;
       font-weight: 700;
       cursor: pointer;
@@ -905,7 +902,7 @@ function memoryChip(id) {{
 function renderMemoryDetail(m) {{
   if (!m) return '<div class="detail">Selecione uma memória.</div>';
   const go = (m.go_deeper || []).map(id => memoryChip(id)).join('') || '<span class="muted">Sem links</span>';
-  const content = m.content_omitted ? '<span class="muted">Conteúdo omitido neste snapshot. Gere novamente sem --summary-only para incluir os corpos das memórias.</span>' : esc(m.content);
+  const content = m.content_omitted ? '<span class="muted">Conteúdo omitido neste snapshot. Gere novamente com --include-content para incluir os corpos das memórias.</span>' : esc(m.content);
   return `<div class="detail">
     <h2>${{esc(m.synopsis || m.id)}}</h2>
     <div class="meta">

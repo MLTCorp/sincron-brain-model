@@ -1,6 +1,15 @@
+param(
+    [string]$Version = ""
+)
+
 $ErrorActionPreference = "Stop"
 
-$Source = "git+https://github.com/MLTCorp/sincron-brain-model.git"
+$Repository = "https://github.com/MLTCorp/sincron-brain-model.git"
+$Source = if ([string]::IsNullOrWhiteSpace($Version)) {
+    "git+$Repository"
+} else {
+    "git+$Repository@$Version"
+}
 $UvInstallUrl = "https://astral.sh/uv/install.ps1"
 $LocalBin = Join-Path $env:USERPROFILE ".local\bin"
 
@@ -191,7 +200,13 @@ Add-PathForSessionAndUser $LocalBin
 $uv = Find-CommandPath "uv"
 if (-not $uv) {
     Write-Host "uv was not found. Installing uv for the current user..."
-    Invoke-RestMethod $UvInstallUrl | Invoke-Expression
+    $uvInstaller = Join-Path $env:TEMP ("uv-install-" + [guid]::NewGuid() + ".ps1")
+    try {
+        Invoke-WebRequest -Uri $UvInstallUrl -OutFile $uvInstaller -UseBasicParsing
+        & $uvInstaller
+    } finally {
+        Remove-Item -LiteralPath $uvInstaller -Force -ErrorAction SilentlyContinue
+    }
     Add-PathForSessionAndUser $LocalBin
     $uv = Find-CommandPath "uv"
 }
