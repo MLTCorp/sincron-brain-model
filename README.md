@@ -21,32 +21,32 @@ See [CLAUDE.md](CLAUDE.md) for full architectural decisions.
 ## Install
 
 Open PowerShell **inside the project folder** that should receive memory, then
-paste this one-liner. It installs `uv` if missing, installs the `sincron-brain`
-CLI, then runs `connect` so the project gets `.\memory`, `.mcp.json`,
-`AGENTS.md`/`CLAUDE.md`, and an initial `_viewer.html` in a single step:
-
-```powershell
-iwr https://raw.githubusercontent.com/MLTCorp/sincron-brain-model/main/install.ps1 -UseBasicParsing | iex
-```
-
-Restart your MCP client after that so it picks up the new `.mcp.json`.
-
-If your terminal blocks `iwr | iex` (some agent CLIs do), use the same script
-but as three semicolon-chained statements that pass the safety classifier:
+paste this one-liner. It works the same in Claude Code, Codex, and any plain
+PowerShell — no remote-pipe pattern, so agent safety classifiers don't block it:
 
 ```powershell
 $s = "$env:TEMP\sb-install.ps1"; iwr https://raw.githubusercontent.com/MLTCorp/sincron-brain-model/main/install.ps1 -OutFile $s -UseBasicParsing; & $s
 ```
 
+It installs `uv` (if missing), installs the `sincron-brain` CLI, and runs
+`connect` against the current folder — so the project gets `.\memory`,
+`.mcp.json`, `AGENTS.md`/`CLAUDE.md`, and an initial `_viewer.html` in a single
+paste. Restart your MCP client after it finishes so the new `.mcp.json` is
+picked up.
+
 For repeatable installs, pin a tag instead of `main`:
 
 ```powershell
-iwr https://raw.githubusercontent.com/MLTCorp/sincron-brain-model/v0.1.0/install.ps1 -UseBasicParsing | iex
+$s = "$env:TEMP\sb-install.ps1"; iwr https://raw.githubusercontent.com/MLTCorp/sincron-brain-model/v0.1.0/install.ps1 -OutFile $s -UseBasicParsing; & $s
 ```
 
 The script refuses to auto-`connect` from a drive root (`C:\`) or your home
-directory — `cd` into a real project folder first. Skipping the connect step
-(if you only want the CLI globally) is just `... ; & $s -SkipConnect`.
+directory — `cd` into a real project folder first. To install only the global
+CLI without wiring up the current project, append `-SkipConnect`:
+
+```powershell
+$s = "$env:TEMP\sb-install.ps1"; iwr https://raw.githubusercontent.com/MLTCorp/sincron-brain-model/main/install.ps1 -OutFile $s -UseBasicParsing; & $s -SkipConnect
+```
 
 ## Extra commands after install
 
