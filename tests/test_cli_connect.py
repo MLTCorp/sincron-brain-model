@@ -117,6 +117,38 @@ def test_connect_updates_existing_agent_instruction_files_idempotently(tmp_path)
     assert "CLAUDE.md" not in {path.name for path in project.iterdir()}
 
 
+def test_connect_defaults_vault_to_project_local_memory_dir(tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+
+    result = runner.invoke(app, ["connect", "--project", str(project)])
+
+    assert result.exit_code == 0
+    expected_vault = (project / "memory").resolve()
+    assert (expected_vault / "_config.toml").exists()
+    payload = json.loads((project / ".mcp.json").read_text(encoding="utf-8"))
+    server = payload["mcpServers"]["sincron-brain"]
+    assert server["env"]["SINCRON_BRAIN_VAULT"] == str(expected_vault)
+
+
+def test_connect_generates_initial_viewer(tmp_path):
+    project = tmp_path / "project"
+    vault = tmp_path / "memory"
+    project.mkdir()
+
+    result = runner.invoke(
+        app,
+        ["connect", "--path", str(vault), "--project", str(project)],
+    )
+
+    assert result.exit_code == 0
+    viewer = vault / "_viewer.html"
+    assert viewer.exists()
+    html = viewer.read_text(encoding="utf-8")
+    assert "Sincron Brain Viewer" in html
+    assert "soul" in html
+
+
 def test_stats_uses_local_project_mcp_config(tmp_path, monkeypatch):
     project = tmp_path / "project"
     vault = tmp_path / "memory"

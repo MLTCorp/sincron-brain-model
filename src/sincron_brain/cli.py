@@ -41,6 +41,18 @@ def _print_default_major_tags() -> None:
     console.print(f"  {', '.join(DEFAULT_MAJOR_TAG_NAMES)}")
 
 
+def _write_initial_viewer(config: VaultConfig) -> Path:
+    """Generate the viewer right after connect so the user sees the taxonomy.
+
+    The server's auto-refresh only kicks in when _viewer.html already exists,
+    so writing it here is what turns "viewer reflects current state" into the
+    default for every project — no manual `sincron-brain viewer` required.
+    """
+    from sincron_brain.viewer import write_viewer
+
+    return write_viewer(config)
+
+
 def _create_vault(
     vault_path: Path,
     provider: str | None,
@@ -108,7 +120,8 @@ def init(
 @app.command()
 def connect(
     path: Annotated[
-        Path | None, typer.Option("--path", help="Vault directory. Default: user data dir.")
+        Path | None,
+        typer.Option("--path", help="Vault directory. Default: <project>/memory."),
     ] = None,
     project: Annotated[
         Path, typer.Option("--project", help="Project directory where .mcp.json will be written.")
@@ -121,13 +134,13 @@ def connect(
     ] = True,
 ) -> None:
     """Create/use a vault and write .mcp.json for the current project."""
-    vault_path = path or _default_vault_path()
-    vault_path = vault_path.expanduser().resolve()
     project_path = project.expanduser().resolve()
 
     if not project_path.exists():
         console.print(f"[red]Project directory not found:[/] {project_path}")
         raise typer.Exit(1)
+
+    vault_path = (path if path is not None else project_path / "memory").expanduser().resolve()
 
     if (vault_path / "_config.toml").exists():
         config = load_config(vault_path)
@@ -139,10 +152,12 @@ def connect(
     mcp_file = _write_project_mcp_config(project_path, config)
     claude_settings = _sync_claude_project_settings(project_path)
     instruction_files = _sync_agent_instruction_files(project_path)
+    viewer_path = _write_initial_viewer(config)
     console.print(f"[green]MCP config written:[/] {mcp_file}")
     console.print(f"[green]Claude project settings synced:[/] {claude_settings}")
     for instruction_file in instruction_files:
         console.print(f"[green]Agent instructions synced:[/] {instruction_file}")
+    console.print(f"[green]Viewer ready:[/] {viewer_path}")
     _print_default_major_tags()
     console.print()
     console.print("[bold]Next steps:[/]")
