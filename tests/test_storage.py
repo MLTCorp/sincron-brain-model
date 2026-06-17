@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 from sincron_brain import storage
 from sincron_brain.config import VaultConfig
+from sincron_brain.major_tags import DEFAULT_MAJOR_TAG_NAMES
 from sincron_brain.models import Memory, ReactivationEvent
 
 
@@ -260,3 +261,56 @@ def test_get_memory_returns_none_for_missing(tmp_path):
     config = make_config(tmp_path)
     with storage.open_db(config) as conn:
         assert storage.get_memory(config, conn, "nope") is None
+
+
+def test_list_major_tags_returns_canonical_taxonomy_when_empty(tmp_path):
+    config = make_config(tmp_path)
+    with storage.open_db(config) as conn:
+        result = storage.list_major_tags(conn)
+
+    names = [item["major_tag"] for item in result]
+    assert names == list(DEFAULT_MAJOR_TAG_NAMES)
+    assert all(item["count"] == 0 for item in result)
+    assert all(item["max_score"] == 0 for item in result)
+    assert all(item["avg_score"] == 0.0 for item in result)
+
+
+def test_list_major_tags_orders_populated_defaults_by_max_score(tmp_path):
+    config = make_config(tmp_path)
+    with storage.open_db(config) as conn:
+        storage.write_memory(
+            config, Memory(id="p", major_tags=["projects"], score=80, synopsis="p"), conn
+        )
+        storage.write_memory(
+            config, Memory(id="s", major_tags=["soul"], score=30, synopsis="s"), conn
+        )
+        result = storage.list_major_tags(conn)
+
+    assert result[0]["major_tag"] == "projects"
+    assert result[0]["count"] == 1
+    assert result[0]["max_score"] == 80
+    assert result[1]["major_tag"] == "soul"
+    assert result[1]["count"] == 1
+    assert result[1]["max_score"] == 30
+    remaining_names = {item["major_tag"] for item in result[2:]}
+    assert remaining_names == set(DEFAULT_MAJOR_TAG_NAMES) - {"projects", "soul"}
+    assert all(item["count"] == 0 for item in result[2:])
+    assert len(result) == len(DEFAULT_MAJOR_TAG_NAMES)
+
+
+def test_list_major_tags_appends_ad_hoc_tags_after_defaults(tmp_path):
+    config = make_config(tmp_path)
+    with storage.open_db(config) as conn:
+        storage.write_memory(
+            config, Memory(id="t", major_tags=["teste"], score=50, synopsis="t"), conn
+        )
+        storage.write_memory(
+            config, Memory(id="s", major_tags=["soul"], score=80, synopsis="s"), conn
+        )
+        result = storage.list_major_tags(conn)
+
+    assert result[0]["major_tag"] == "soul"
+    assert result[-1]["major_tag"] == "teste"
+    assert result[-1]["count"] == 1
+    assert result[-1]["max_score"] == 50
+    assert len(result) == len(DEFAULT_MAJOR_TAG_NAMES) + 1

@@ -20,7 +20,7 @@ from sincron_brain.config import (
     VaultConfig,
     load_config,
 )
-from sincron_brain.major_tags import default_major_tag_names_csv
+from sincron_brain.major_tags import DEFAULT_MAJOR_TAG_NAMES, default_major_tag_names_csv
 
 app = typer.Typer(
     name="sincron-brain",
@@ -32,6 +32,13 @@ console = Console()
 
 def _default_vault_path() -> Path:
     return Path(user_data_dir("sincron-brain", "sincron")) / "memory"
+
+
+def _print_default_major_tags() -> None:
+    """Show the canonical taxonomy so users see what's armed in a fresh vault."""
+    console.print()
+    console.print(f"[bold]Major Tags loaded:[/] {len(DEFAULT_MAJOR_TAG_NAMES)}")
+    console.print(f"  {', '.join(DEFAULT_MAJOR_TAG_NAMES)}")
 
 
 def _create_vault(
@@ -92,6 +99,7 @@ def init(
     console.print(f"  Config: {config.config_file}")
     console.print(f"  Index:  {config.index_db}")
     console.print(f"  Judge:  {config.judge.provider} / {config.judge.model}")
+    _print_default_major_tags()
     console.print()
     console.print("[bold]Connect a project to this vault:[/]")
     console.print(f'  sincron-brain connect --path "{vault_path}"')
@@ -135,6 +143,7 @@ def connect(
     console.print(f"[green]Claude project settings synced:[/] {claude_settings}")
     for instruction_file in instruction_files:
         console.print(f"[green]Agent instructions synced:[/] {instruction_file}")
+    _print_default_major_tags()
     console.print()
     console.print("[bold]Next steps:[/]")
     console.print("  1. Restart your MCP client/agent.")

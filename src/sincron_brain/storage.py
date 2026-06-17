@@ -21,6 +21,7 @@ from typing import Any, cast
 import frontmatter
 
 from sincron_brain.config import VaultConfig
+from sincron_brain.major_tags import DEFAULT_MAJOR_TAG_NAMES
 from sincron_brain.models import DraftItem, Memory, ReactivationEvent
 from sincron_brain.tags import normalize_tags
 
@@ -342,25 +343,45 @@ def reactivate_memory(
 
 
 def list_major_tags(conn: sqlite3.Connection) -> list[dict]:
-    """Return all distinct major_tags with counts and avg score."""
-    rows = conn.execute(
-        "SELECT major_tags, score FROM memories"
-    ).fetchall()
+    """Return the Major Tag taxonomy overlaid with actual usage.
+
+    The default canonical taxonomy is always present (count=0 when empty),
+    so agents and the viewer always see the full set of retrieval routes
+    available in the vault. Ad-hoc Major Tags created by the judge appear
+    after the defaults.
+
+    Ordering:
+      1. Defaults with memories, by max_score DESC.
+      2. Defaults still empty, in canonical order.
+      3. Non-default tags, by max_score DESC.
+    """
+    rows = conn.execute("SELECT major_tags, score FROM memories").fetchall()
     bucket: dict[str, list[int]] = {}
     for r in rows:
         for tag in json.loads(r["major_tags"]):
             bucket.setdefault(tag, []).append(r["score"])
-    out = []
-    for tag, scores in sorted(bucket.items(), key=lambda kv: -max(kv[1])):
-        out.append(
-            {
-                "major_tag": tag,
-                "count": len(scores),
-                "max_score": max(scores),
-                "avg_score": round(sum(scores) / len(scores), 1),
-            }
-        )
-    return out
+
+    def card(tag: str, scores: list[int]) -> dict:
+        if not scores:
+            return {"major_tag": tag, "count": 0, "max_score": 0, "avg_score": 0.0}
+        return {
+            "major_tag": tag,
+            "count": len(scores),
+            "max_score": max(scores),
+            "avg_score": round(sum(scores) / len(scores), 1),
+        }
+
+    defaults = set(DEFAULT_MAJOR_TAG_NAMES)
+    populated_defaults = sorted(
+        ((tag, bucket[tag]) for tag in DEFAULT_MAJOR_TAG_NAMES if tag in bucket),
+        key=lambda kv: -max(kv[1]),
+    )
+    empty_defaults = [(tag, []) for tag in DEFAULT_MAJOR_TAG_NAMES if tag not in bucket]
+    extras = sorted(
+        ((tag, scores) for tag, scores in bucket.items() if tag not in defaults),
+        key=lambda kv: -max(kv[1]),
+    )
+    return [card(tag, scores) for tag, scores in (*populated_defaults, *empty_defaults, *extras)]
 
 
 def list_tags(
