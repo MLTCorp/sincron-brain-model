@@ -437,6 +437,12 @@ def render_viewer_html(data: dict[str, Any]) -> str:
       gap: 18px;
       align-items: start;
     }}
+    .split {{
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 18px;
+      align-items: start;
+    }}
     .list {{ display: grid; gap: 10px; }}
     .row {{
       border: 1px solid var(--line);
@@ -756,7 +762,7 @@ def render_viewer_html(data: dict[str, Any]) -> str:
       }}
       .app {{ grid-template-columns: 1fr; }}
       aside {{ border-right: 0; border-bottom: 1px solid var(--line); }}
-      .grid, .meta, .relation-grid {{ grid-template-columns: 1fr; }}
+      .grid, .split, .meta, .relation-grid {{ grid-template-columns: 1fr; }}
     }}
   </style>
 </head>
@@ -981,34 +987,11 @@ function renderGoDeeper() {{
     </div>`;
   bindMemoryLinks();
 }}
-function aggregateMajorTags(memories) {{
-  const rows = new Map();
-  memories.forEach(m => (m.major_tags || ['sem-major-tag']).forEach(tag => {{
-    const row = rows.get(tag) || {{ major_tag: tag, count: 0, max_score: 0, total_score: 0 }};
-    const score = Number(m.score || 0);
-    row.count += 1;
-    row.max_score = Math.max(row.max_score, score);
-    row.total_score += score;
-    rows.set(tag, row);
-  }}));
-  return [...rows.values()].map(row => ({{
-    major_tag: row.major_tag,
-    count: row.count,
-    max_score: Math.round(row.max_score),
-    avg_score: Math.round((row.total_score / row.count) * 10) / 10,
-  }})).sort((a, b) => b.count - a.count || a.major_tag.localeCompare(b.major_tag));
-}}
-function aggregateTags(memories) {{
-  const rows = new Map();
-  memories.forEach(m => (m.tags || []).forEach(tag => rows.set(tag, (rows.get(tag) || 0) + 1)));
-  return [...rows.entries()].map(([tag, count]) => ({{ tag, count }})).sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
-}}
 function renderTags() {{
-  const memories = filteredMemories();
   document.getElementById('tab-tags').innerHTML = `
-    <div class="grid">
-      <div class="panel"><h2>Major tags</h2>${{table(aggregateMajorTags(memories), ['major_tag','count','max_score','avg_score'])}}</div>
-      <div class="panel"><h2>Tags no filtro</h2>${{table(aggregateTags(memories), ['tag','count'])}}</div>
+    <div class="split">
+      <div class="panel"><h2>Major tags</h2>${{table(DATA.major_tags, ['major_tag','count','max_score','avg_score'])}}</div>
+      <div class="panel"><h2>Tags comuns</h2>${{table(DATA.tags, ['tag','count','max_score','avg_score'])}}</div>
     </div>`;
 }}
 function renderSleeps() {{
@@ -1022,16 +1005,6 @@ function renderSleeps() {{
     duration_seconds: s.duration_seconds || 0,
   }}));
   document.getElementById('tab-sleeps').innerHTML = `<div class="panel"><h2>Sleeps</h2>${{table(rows, ['run','started_at','processed','created','merged','reactivated','duration_seconds'])}}</div>`;
-}}
-function renderGraph() {{
-  const edges = DATA.go_deeper_edges;
-  const html = edges.length ? edges.map(e => `
-    <div class="edge">
-      <div class="node">${{esc(byId[e.from]?.synopsis || e.from)}}<br><span class="muted">${{esc(shortId(e.from))}}</span></div>
-      <div class="arrow">→</div>
-      <div class="node">${{esc(byId[e.to]?.synopsis || e.to)}}<br><span class="muted">${{esc(shortId(e.to))}}</span></div>
-    </div>`).join('') : '<div class="panel">Nenhum link go_deeper registrado.</div>';
-  document.getElementById('tab-graph').innerHTML = `<div class="graph">${{html}}</div>`;
 }}
 function renderGraphVisual() {{
   const allFiltered = filteredMemories();
@@ -1139,7 +1112,7 @@ function renderGraphVisual() {{
 }}
 function renderQueues() {{
   document.getElementById('tab-queues').innerHTML = `
-    <div class="grid">
+    <div class="split">
       <div class="panel"><h2>Drafts</h2>${{table(DATA.queues.drafts, ['file','id','source_type','hint_tags','timestamp'])}}</div>
       <div class="panel"><h2>Reativações</h2>${{table(DATA.queues.reactivations, ['file','id','memory_ids','reason','timestamp'])}}</div>
     </div>`;
