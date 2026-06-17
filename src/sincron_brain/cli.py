@@ -22,6 +22,9 @@ from sincron_brain.config import (
 )
 from sincron_brain.major_tags import DEFAULT_MAJOR_TAG_NAMES, default_major_tag_names_csv
 
+JUDGE_PROVIDER_OVERRIDE_ENV = "SINCRON_BRAIN_JUDGE_PROVIDER"
+JUDGE_MODEL_OVERRIDE_ENV = "SINCRON_BRAIN_JUDGE_MODEL"
+
 app = typer.Typer(
     name="sincron-brain",
     help="Plug-and-play memory layer for AI agents. MCP server.",
@@ -65,6 +68,10 @@ def _print_judge_status(config: VaultConfig) -> None:
             f"{status['provider']}/{status['model']} · "
             f"key {status['api_key_env']} detected"
         )
+        console.print(
+            "  To switch judge: [bold]sincron-brain set-judge --provider <name>[/] "
+            f"(or set {JUDGE_PROVIDER_OVERRIDE_ENV} before `connect`)."
+        )
     else:
         console.print(
             f"[bold]Judge:[/] [yellow]FALLBACK MODE[/] · "
@@ -88,7 +95,8 @@ def _print_judge_status(config: VaultConfig) -> None:
             f'$env:{status["api_key_env"]} = "<your-key>"'
         )
         console.print(
-            f"[yellow]  Or switch to another provider:[/] sincron-brain init --provider <name>  "
+            f"[yellow]  Or switch to another provider:[/] "
+            f"sincron-brain set-judge --provider <name>  "
             f"(supported: {', '.join(PROVIDER_API_KEY_ENV.keys())})"
         )
 
@@ -101,6 +109,33 @@ def _detect_provider_from_env() -> str | None:
     return None
 
 
+def _judge_provider_override() -> str | None:
+    """Explicit override that beats both --provider flag detection and env-key detection."""
+    value = os.environ.get(JUDGE_PROVIDER_OVERRIDE_ENV, "").strip().lower()
+    if not value:
+        return None
+    if value not in PROVIDER_API_KEY_ENV:
+        console.print(
+            f"[yellow]Ignoring {JUDGE_PROVIDER_OVERRIDE_ENV}={value!r}[/] — "
+            f"not a supported provider ({', '.join(PROVIDER_API_KEY_ENV)})."
+        )
+        return None
+    return value
+
+
+def _judge_model_override() -> str | None:
+    value = os.environ.get(JUDGE_MODEL_OVERRIDE_ENV, "").strip()
+    return value or None
+
+
+def _apply_judge_config(config: VaultConfig, provider: str, model: str | None = None) -> None:
+    """Mutate config.judge to point at a new provider/model and persist it to disk."""
+    config.judge.provider = provider
+    config.judge.model = model or PROVIDER_DEFAULT_MODEL[provider]
+    config.judge.api_key_env = PROVIDER_API_KEY_ENV[provider]
+    config.save()
+
+
 def _create_vault(
     vault_path: Path,
     provider: str | None,
@@ -108,9 +143,15 @@ def _create_vault(
 ) -> VaultConfig:
     console.print(f"[bold]Creating vault at:[/] {vault_path}")
 
+    override = _judge_provider_override()
     detected = _detect_provider_from_env()
     if provider:
         chosen_provider = provider
+    elif override:
+        chosen_provider = override
+        console.print(
+            f"[green]Using[/] [bold]{override}[/] from {JUDGE_PROVIDER_OVERRIDE_ENV} override."
+        )
     elif detected:
         chosen_provider = detected
         console.print(
@@ -128,7 +169,7 @@ def _create_vault(
         chosen_provider = _prompt_provider()
 
     api_key_env = PROVIDER_API_KEY_ENV[chosen_provider]
-    model = PROVIDER_DEFAULT_MODEL[chosen_provider]
+    model = _judge_model_override() or PROVIDER_DEFAULT_MODEL[chosen_provider]
 
     if not yes and not os.environ.get(api_key_env):
         console.print(
@@ -212,6 +253,11 @@ def connect(
     if (vault_path / "_config.toml").exists():
         config = load_config(vault_path)
         console.print(f"[green]Using existing vault:[/] {config.vault_path}")
+        if provider:
+            _apply_judge_config(config, provider)
+            console.print(
+                f"[green]Judge updated:[/] {config.judge.provider}/{config.judge.model}"
+            )
     else:
         config = _create_vault(vault_path, provider, yes)
         console.print("[green]Vault created.[/]")
@@ -231,6 +277,49 @@ def connect(
     console.print("[bold]Next steps:[/]")
     console.print("  1. Restart your MCP client/agent.")
     console.print("  2. Run: sincron-brain stats")
+
+
+@app.command("set-judge")
+def set_judge(
+    provider: Annotated[
+        str,
+        typer.Option(
+            "--provider",
+            help=f"Judge provider. Supported: {', '.join(PROVIDER_API_KEY_ENV)}.",
+        ),
+    ],
+    model: Annotated[
+        str | None,
+        typer.Option(
+            "--model",
+            help="Judge model. Defaults to the canonical model for the chosen provider.",
+        ),
+    ] = None,
+) -> None:
+    """Update the judge provider/model for an existing vault without recreating it.
+
+    Useful when you develop with one LLM (e.g. Claude in the agent) but want
+    the indexing judge to run on another provider (e.g. a cheaper or local one).
+    The vault's config.toml is rewritten; nothing else is touched.
+    """
+    if provider not in PROVIDER_API_KEY_ENV:
+        console.print(
+            f"[red]Unsupported provider:[/] {provider}. "
+            f"Pick one of: {', '.join(PROVIDER_API_KEY_ENV)}."
+        )
+        raise typer.Exit(1)
+
+    config = _load_or_die()
+    _apply_judge_config(config, provider, model)
+    console.print(
+        f"[green]Judge updated:[/] {config.judge.provider}/{config.judge.model} "
+        f"(key {config.judge.api_key_env})"
+    )
+    _print_judge_status(config)
+    console.print()
+    console.print(
+        "[bold]Reminder:[/] restart your MCP client so the subprocess picks up the new judge."
+    )
 
 
 @app.command()

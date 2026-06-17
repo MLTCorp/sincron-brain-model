@@ -178,6 +178,100 @@ def test_connect_uses_provider_detected_from_env(tmp_path, monkeypatch):
     assert 'api_key_env = "GEMINI_API_KEY"' in config_text
 
 
+def test_judge_provider_override_env_var_wins_over_detection(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    vault = tmp_path / "memory"
+    project.mkdir()
+    for env_var in PROVIDER_API_KEY_ENV.values():
+        monkeypatch.delenv(env_var, raising=False)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "x")
+    monkeypatch.setenv("SINCRON_BRAIN_JUDGE_PROVIDER", "openai")
+
+    result = runner.invoke(
+        app,
+        ["connect", "--path", str(vault), "--project", str(project)],
+    )
+
+    assert result.exit_code == 0
+    config_text = (vault / "_config.toml").read_text(encoding="utf-8")
+    assert 'provider = "openai"' in config_text
+    assert 'api_key_env = "OPENAI_API_KEY"' in config_text
+
+
+def test_judge_model_override_env_var_sets_custom_model(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    vault = tmp_path / "memory"
+    project.mkdir()
+    for env_var in PROVIDER_API_KEY_ENV.values():
+        monkeypatch.delenv(env_var, raising=False)
+    monkeypatch.setenv("OPENAI_API_KEY", "x")
+    monkeypatch.setenv("SINCRON_BRAIN_JUDGE_MODEL", "gpt-5-custom-tag")
+
+    result = runner.invoke(
+        app,
+        ["connect", "--path", str(vault), "--project", str(project)],
+    )
+
+    assert result.exit_code == 0
+    config_text = (vault / "_config.toml").read_text(encoding="utf-8")
+    assert 'model = "gpt-5-custom-tag"' in config_text
+
+
+def test_set_judge_updates_existing_vault_without_recreating(tmp_path):
+    project = tmp_path / "project"
+    vault = tmp_path / "memory"
+    project.mkdir()
+
+    runner.invoke(app, ["connect", "--path", str(vault), "--project", str(project)])
+    before = (vault / "_config.toml").read_text(encoding="utf-8")
+
+    result = runner.invoke(
+        app,
+        ["set-judge", "--provider", "mistral", "--model", "mistral-large"],
+        env={"SINCRON_BRAIN_VAULT": str(vault)},
+    )
+
+    assert result.exit_code == 0
+    after = (vault / "_config.toml").read_text(encoding="utf-8")
+    assert 'provider = "mistral"' in after
+    assert 'model = "mistral-large"' in after
+    assert 'api_key_env = "MISTRAL_API_KEY"' in after
+    assert before != after
+
+
+def test_connect_existing_vault_with_provider_flag_updates_judge(tmp_path):
+    project = tmp_path / "project"
+    vault = tmp_path / "memory"
+    project.mkdir()
+
+    runner.invoke(app, ["connect", "--path", str(vault), "--project", str(project)])
+    result = runner.invoke(
+        app,
+        ["connect", "--path", str(vault), "--project", str(project), "--provider", "ollama"],
+    )
+
+    assert result.exit_code == 0
+    config_text = (vault / "_config.toml").read_text(encoding="utf-8")
+    assert 'provider = "ollama"' in config_text
+    assert 'api_key_env = "OLLAMA_API_KEY"' in config_text
+
+
+def test_set_judge_rejects_unsupported_provider(tmp_path):
+    project = tmp_path / "project"
+    vault = tmp_path / "memory"
+    project.mkdir()
+    runner.invoke(app, ["connect", "--path", str(vault), "--project", str(project)])
+
+    result = runner.invoke(
+        app,
+        ["set-judge", "--provider", "fakeai"],
+        env={"SINCRON_BRAIN_VAULT": str(vault)},
+    )
+
+    assert result.exit_code != 0
+    assert "Unsupported provider" in result.output
+
+
 def test_stats_uses_local_project_mcp_config(tmp_path, monkeypatch):
     project = tmp_path / "project"
     vault = tmp_path / "memory"
