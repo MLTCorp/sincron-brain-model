@@ -92,7 +92,11 @@ def remember(
             (e.g. 'user_message', 'voice_transcript', 'image_description', 'web_article').
         asset_ref: Optional opaque reference (file path or URL) to the original
             binary. Stored as a string, never opened by this server.
-        hint_tags: Optional suggested tags. The judge validates/refines them at sleep.
+        hint_tags: Optional suggested **common tags** (noun-like retrieval labels).
+            These are never promoted to major_tag; the judge picks the major_tag from
+            the canonical taxonomy. Pass common-tag-style values like "api_key",
+            "matheus_massari", "env_file"; do not pass single words like "name" or
+            "identity" expecting them to become a Major Tag.
         metadata: Free-form dict attached to the draft for the host app's use.
 
     Returns:
@@ -147,7 +151,8 @@ def remember_turn(
         agent_response: The agent's response/action.
         memory_reason: Why this turn should become memory, ideally including the
             durable fact or correction in concise form.
-        hint_tags: Optional suggested tags.
+        hint_tags: Optional suggested **common tags** only (never major_tag).
+            See `remember()` for the same constraint.
         metadata: Free-form dict attached to the draft for the host app's use.
 
     Returns:

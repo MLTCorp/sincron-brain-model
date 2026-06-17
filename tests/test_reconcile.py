@@ -77,7 +77,8 @@ def test_reconcile_create_only_skips_candidate_lookup(tmp_path, monkeypatch):
         )
 
     assert outcome == "created"
-    assert mem.major_tags == ["trabalho"]
+    assert mem.major_tags == ["_uncategorized"]
+    assert mem.tags == ["trabalho"]
 
 
 def test_reconcile_uses_one_primary_major_tag_for_new_memory(tmp_path):
@@ -99,7 +100,33 @@ def test_reconcile_uses_one_primary_major_tag_for_new_memory(tmp_path):
     assert mem.tags == ["api_key", "env_file"]
 
 
-def test_reconcile_uses_first_hint_tag_when_decision_has_no_major_tag(tmp_path):
+def test_reconcile_never_promotes_hint_tags_to_major_tag(tmp_path):
+    """Regression: a draft with hint_tags=["name","identity"] used to land in a
+    bogus Major Tag "name" because the reconcile auto-promoted the first hint.
+    Now hint_tags are common tag candidates only — Major Tag must come from the
+    judge's decision, and falls back to _uncategorized when absent.
+    """
+    config = make_config(tmp_path)
+    draft = DraftItem(
+        id="d",
+        content="O nome do usuário é Massari.",
+        hint_tags=["name", "identity"],
+    )
+
+    with storage.open_db(config) as conn:
+        _, mem = reconcile.reconcile_draft(
+            conn,
+            draft,
+            config,
+            lambda *_: Decision(action="create"),
+        )
+
+    assert mem.major_tags == ["_uncategorized"]
+    assert "name" not in mem.major_tags
+    assert mem.tags == ["name", "identity"]
+
+
+def test_reconcile_hint_tags_become_common_tags_when_decision_has_no_tags(tmp_path):
     config = make_config(tmp_path)
     draft = DraftItem(id="d", content="deploy toda sexta", hint_tags=["schedule", "workflows"])
 
@@ -111,7 +138,22 @@ def test_reconcile_uses_first_hint_tag_when_decision_has_no_major_tag(tmp_path):
             lambda *_: Decision(action="create"),
         )
 
-    assert mem.major_tags == ["schedule"]
+    assert mem.major_tags == ["_uncategorized"]
+    assert mem.tags == ["schedule", "workflow"]
+
+
+def test_reconcile_decision_tags_take_precedence_over_hint_tags(tmp_path):
+    config = make_config(tmp_path)
+    draft = DraftItem(id="d", content="x", hint_tags=["fallback"])
+
+    def decide(_draft, _cands):
+        return Decision(action="create", major_tags=["soul"], tags=["preferred"])
+
+    with storage.open_db(config) as conn:
+        _, mem = reconcile.reconcile_draft(conn, draft, config, decide)
+
+    assert mem.major_tags == ["soul"]
+    assert mem.tags == ["preferred"]
 
 
 def test_reconcile_merge_enriches_without_duplicating(tmp_path):

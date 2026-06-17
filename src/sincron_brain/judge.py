@@ -60,7 +60,11 @@ SYSTEM_PROMPT = (
     "- emotional=false quando a emoção estiver apenas dentro do fato narrado. Ex: "
     "'Esse cliente me deixou frustrado porque atrasou o pagamento' é conteúdo da memória, "
     "não reforço emocional do sistema.\n"
-    "- target_id só pode ser o id de uma candidata listada."
+    "- target_id só pode ser o id de uma candidata listada.\n"
+    "- HINT_TAGS do draft (se houver) são sugestões de tags COMUNS feitas pelo host. "
+    "Trate-as como candidatas a `tags`, NUNCA como major_tag. Promover um hint a "
+    "major_tag (ex: 'name', 'identity') é proibido — esses valores ficam em `tags`, e "
+    "o major_tag certo vem dos defaults canônicos (ex: 'user_profile' para identidade do usuário)."
 )
 
 
@@ -100,6 +104,11 @@ def build_messages(draft: DraftItem, candidates: list[Candidate]) -> list[dict]:
         )
         for c in candidates
     ) or "(nenhuma)"
+    hint_line = (
+        f"HINT_TAGS (candidatas a `tags` comuns, nunca a major_tag): {list(draft.hint_tags)}\n\n"
+        if draft.hint_tags
+        else ""
+    )
     if draft.source_type == "conversation_turn" and (
         draft.user_message or draft.agent_response or draft.memory_reason
     ):
@@ -111,11 +120,13 @@ def build_messages(draft: DraftItem, candidates: list[Candidate]) -> list[dict]:
             f"RESPOSTA DA IA (material bruto, não copie como transcrição):\n"
             f"{draft.agent_response or '(vazia)'}\n\n"
             f"FALLBACK CONTEXTUAL JÁ COMPILADO:\n{draft.content}\n\n"
+            f"{hint_line}"
             f"MEMÓRIAS EXISTENTES CANDIDATAS:\n{cand_lines}"
         )
     else:
         user = (
             f"NOVA INFORMAÇÃO (source={draft.source_type}):\n{draft.content}\n\n"
+            f"{hint_line}"
             f"MEMÓRIAS EXISTENTES CANDIDATAS:\n{cand_lines}"
         )
     return [

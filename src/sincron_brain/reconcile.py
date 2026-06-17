@@ -133,14 +133,12 @@ def _apply_merge(target: Memory, decision: Decision, config: VaultConfig) -> Mem
 
 
 def _build_new(draft: DraftItem, decision: Decision, config: VaultConfig) -> Memory:
-    major_tags = _primary_major_tags(decision.major_tags or draft.hint_tags)
-    if not major_tags:
-        major_tags = ["_uncategorized"]
+    major_tags = _primary_major_tags(decision.major_tags) or ["_uncategorized"]
     synopsis = decision.synopsis or _fallback_synopsis(draft.content)
     memory = Memory(
         id=storage.new_memory_id(synopsis[:40]),
         major_tags=major_tags,
-        tags=normalize_tags(decision.tags),
+        tags=normalize_tags(decision.tags or draft.hint_tags),
         score=config.score.initial,
         source_type=draft.source_type,
         asset_ref=draft.asset_ref,
