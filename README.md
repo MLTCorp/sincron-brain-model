@@ -51,10 +51,17 @@ $s = "$env:TEMP\sb-install.ps1"; iwr https://raw.githubusercontent.com/MLTCorp/s
 ## Extra commands after install
 
 ```powershell
-$env:ANTHROPIC_API_KEY = "<your-anthropic-api-key>"   # judge provider
-sincron-brain stats                                    # verify
-sincron-brain viewer                                   # rebuild the debug HTML if deleted
-sincron-brain sleep-now                                # force indexing
+# Export the API key for your judge provider — pick the one that matches
+# the provider chosen by `connect` (it auto-detects from the environment;
+# override with `sincron-brain init --provider <name>` if needed).
+# Supported envs: ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY,
+# VOYAGE_API_KEY, COHERE_API_KEY, MISTRAL_API_KEY, AZURE_API_KEY,
+# AWS_ACCESS_KEY_ID, OLLAMA_API_KEY, CUSTOM_API_KEY.
+$env:<PROVIDER_API_KEY_ENV> = "<your-key>"
+
+sincron-brain stats        # verify (shows judge status: ready/fallback)
+sincron-brain viewer       # rebuild the debug HTML if deleted
+sincron-brain sleep-now    # force indexing
 ```
 
 `connect` is the recommended plug-and-play path. With no flags it creates the
@@ -133,7 +140,7 @@ into that client's MCP settings:
       "args": ["serve"],
       "env": {
         "SINCRON_BRAIN_VAULT": "/absolute/path/to/your/memory",
-        "ANTHROPIC_API_KEY": "<your-anthropic-api-key>"
+        "<PROVIDER_API_KEY_ENV>": "<your-judge-provider-key>"
       }
     }
   }

@@ -87,6 +87,18 @@ def _print_judge_status(config: VaultConfig) -> None:
             f"[yellow]  Set it in the shell that starts your MCP client:[/] "
             f'$env:{status["api_key_env"]} = "<your-key>"'
         )
+        console.print(
+            f"[yellow]  Or switch to another provider:[/] sincron-brain init --provider <name>  "
+            f"(supported: {', '.join(PROVIDER_API_KEY_ENV.keys())})"
+        )
+
+
+def _detect_provider_from_env() -> str | None:
+    """Pick the first supported provider whose API key env var is already set."""
+    for provider, env_var in PROVIDER_API_KEY_ENV.items():
+        if os.environ.get(env_var):
+            return provider
+    return None
 
 
 def _create_vault(
@@ -96,9 +108,27 @@ def _create_vault(
 ) -> VaultConfig:
     console.print(f"[bold]Creating vault at:[/] {vault_path}")
 
-    chosen_provider = provider or ("anthropic" if yes else _prompt_provider())
-    api_key_env = PROVIDER_API_KEY_ENV.get(chosen_provider, "ANTHROPIC_API_KEY")
-    model = PROVIDER_DEFAULT_MODEL.get(chosen_provider, "claude-haiku-4-5-20251001")
+    detected = _detect_provider_from_env()
+    if provider:
+        chosen_provider = provider
+    elif detected:
+        chosen_provider = detected
+        console.print(
+            f"[green]Detected[/] {PROVIDER_API_KEY_ENV[detected]} in the environment — "
+            f"using [bold]{detected}[/] as the judge provider."
+        )
+    elif yes:
+        chosen_provider = next(iter(PROVIDER_API_KEY_ENV))
+        console.print(
+            f"[yellow]No provider API key detected in the environment.[/] "
+            f"Defaulting the judge config to [bold]{chosen_provider}[/]. "
+            f"Override with `--provider <name>` or export the env var for your provider."
+        )
+    else:
+        chosen_provider = _prompt_provider()
+
+    api_key_env = PROVIDER_API_KEY_ENV[chosen_provider]
+    model = PROVIDER_DEFAULT_MODEL[chosen_provider]
 
     if not yes and not os.environ.get(api_key_env):
         console.print(

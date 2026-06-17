@@ -2,7 +2,8 @@ import json
 
 from typer.testing import CliRunner
 
-from sincron_brain.cli import app
+from sincron_brain.cli import _detect_provider_from_env, app
+from sincron_brain.config import PROVIDER_API_KEY_ENV
 
 runner = CliRunner()
 
@@ -147,6 +148,34 @@ def test_connect_generates_initial_viewer(tmp_path):
     html = viewer.read_text(encoding="utf-8")
     assert "Sincron Brain Viewer" in html
     assert "soul" in html
+
+
+def test_detect_provider_from_env_picks_first_set_key(monkeypatch):
+    for env_var in PROVIDER_API_KEY_ENV.values():
+        monkeypatch.delenv(env_var, raising=False)
+    assert _detect_provider_from_env() is None
+
+    monkeypatch.setenv("OPENAI_API_KEY", "x")
+    assert _detect_provider_from_env() == "openai"
+
+
+def test_connect_uses_provider_detected_from_env(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    vault = tmp_path / "memory"
+    project.mkdir()
+    for env_var in PROVIDER_API_KEY_ENV.values():
+        monkeypatch.delenv(env_var, raising=False)
+    monkeypatch.setenv("GEMINI_API_KEY", "x")
+
+    result = runner.invoke(
+        app,
+        ["connect", "--path", str(vault), "--project", str(project)],
+    )
+
+    assert result.exit_code == 0
+    config_text = (vault / "_config.toml").read_text(encoding="utf-8")
+    assert 'provider = "google"' in config_text
+    assert 'api_key_env = "GEMINI_API_KEY"' in config_text
 
 
 def test_stats_uses_local_project_mcp_config(tmp_path, monkeypatch):
