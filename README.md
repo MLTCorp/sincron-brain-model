@@ -63,10 +63,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "`$ErrorActionPreference=
 When it finishes, tell me to restart this conversation or reload the MCP client so the sincron-brain server is detected.
 ```
 
-The bootstrap installs/updates `sincron-brain`, creates/uses `.\memory`, writes
-`.mcp.json`, syncs Claude project settings, and adds the managed memory
-instruction block to `AGENTS.md`/`CLAUDE.md`. Run it from the project root; the
-script refuses unsafe locations such as `C:\` or the user's home directory.
+The bootstrap installs/updates `sincron-brain`, creates `.\memory`, writes
+`.mcp.json`, syncs Claude project settings, adds the managed memory
+instruction block to `AGENTS.md`/`CLAUDE.md`, and generates `_viewer.html`
+with the canonical Major Tag taxonomy ready to inspect. Run it from the
+project root; the script refuses unsafe locations such as `C:\` or the
+user's home directory.
 Using `git clone` keeps the command compatible with private repositories when
 the user already has GitHub credentials configured for Git. For repeatable
 bootstraps, pass `-Version v0.1.0` to `bootstrap.ps1`.
@@ -76,7 +78,7 @@ bootstraps, pass `-Version v0.1.0` to `bootstrap.ps1`.
 cd C:\Projects\my-agent-project
 
 # Create/use the vault and generate .mcp.json for this project.
-sincron-brain connect --path .\memory
+sincron-brain connect
 
 # Export the API key for your judge provider (matches the prompt choice)
 $env:ANTHROPIC_API_KEY = "<your-anthropic-api-key>"
@@ -84,15 +86,18 @@ $env:ANTHROPIC_API_KEY = "<your-anthropic-api-key>"
 # (Optional) verify it works
 sincron-brain stats
 
-# (Optional) generate a local debug HTML viewer
+# (Optional) refresh the local debug HTML viewer (connect already creates it)
 sincron-brain viewer
 
 # Force a sleep run on demand
 sincron-brain sleep-now
 ```
 
-`connect` is the recommended plug-and-play path. It creates the vault if needed
-and writes a project-level `.mcp.json` like this. For Claude Code projects, it
+`connect` is the recommended plug-and-play path. With no flags it creates the
+vault at `<project>/memory`, writes a project-level `.mcp.json` like the example
+below, and generates `_viewer.html` so the canonical Major Tag taxonomy is
+visible from minute one. Pass `--path <dir>` only when you want a vault outside
+the project (e.g., a vault shared across projects). For Claude Code projects, it
 also syncs `.claude/settings.local.json` so the `sincron-brain` server is enabled
 and stale project MCP entries are removed. It also writes a managed memory
 instruction block to `AGENTS.md`/`CLAUDE.md`, so agents know when to consult
@@ -147,7 +152,7 @@ use the Store alias directly:
 The simplest path is to run this inside the project:
 
 ```powershell
-sincron-brain connect --path .\memory
+sincron-brain connect
 ```
 
 That writes `.mcp.json` for MCP clients that read project-level config. Restart
@@ -189,13 +194,16 @@ After restart, your agent will have access to these tools:
 
 ## Debug viewer
 
-The viewer is optional. It generates a static HTML snapshot of the current vault:
+The viewer is optional. `connect` creates the first `_viewer.html` already, and
+from then on every `remember()` and `use_memories()` call keeps it in sync —
+you do not need to run anything else. Re-running this command rebuilds the
+snapshot manually if you ever delete it:
 
 ```powershell
 sincron-brain viewer
 ```
 
-By default it writes:
+By default it lives at:
 
 ```text
 memory/_viewer.html
