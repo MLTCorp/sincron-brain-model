@@ -1,5 +1,6 @@
 param(
-    [string]$Version = ""
+    [string]$Version = "",
+    [switch]$SkipConnect
 )
 
 $ErrorActionPreference = "Stop"
@@ -251,11 +252,32 @@ if ($sincronBrain) {
 }
 
 Write-Host ""
-Write-Host "Next steps:"
-Write-Host "  sincron-brain init"
-Write-Host "  sincron-brain stats"
-Write-Host ""
-Write-Host "MCP command:"
-Write-Host '  "command": "sincron-brain",'
-Write-Host '  "args": ["serve"]'
+
+if ($SkipConnect) {
+    Write-Host "Skipping connect (per -SkipConnect). To wire up a project later, cd into it and run:" -ForegroundColor Yellow
+    Write-Host "  sincron-brain connect"
+} elseif ($sincronBrain) {
+    $cwd = [System.IO.Path]::GetFullPath((Get-Location).Path).TrimEnd("\")
+    $cwdRoot = [System.IO.Path]::GetPathRoot($cwd).TrimEnd("\")
+    $userHome = [System.IO.Path]::GetFullPath($env:USERPROFILE).TrimEnd("\")
+    $isUnsafeDir = ($cwd -eq $cwdRoot) -or ($cwd -eq $userHome)
+
+    if ($isUnsafeDir) {
+        Write-Host "Skipping auto-connect: '$cwd' is a drive root or home directory." -ForegroundColor Yellow
+        Write-Host "cd into a project folder and run: sincron-brain connect"
+    } else {
+        Write-Host "Connecting this project to a memory vault at .\memory..."
+        & $sincronBrain connect
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "Connect failed. You can re-run: sincron-brain connect" -ForegroundColor Yellow
+        } else {
+            Write-Host ""
+            Write-Host "Restart your MCP client/agent so it detects the new .mcp.json." -ForegroundColor Cyan
+        }
+    }
+} else {
+    Write-Host "Open a new PowerShell window, cd into your project, and run:" -ForegroundColor Yellow
+    Write-Host "  sincron-brain connect"
+}
+
 Write-Host ""
