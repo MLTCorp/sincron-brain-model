@@ -453,26 +453,43 @@ def sleep_now() -> dict:
     suggests Go Deeper links, applies score decay, then reactivates memories
     selected via use_memories(). Costs LLM tokens via the configured judge provider.
 
+    When the configured judge's API key is missing, sleep falls back to a
+    mechanical create-only mode: drafts still persist but Major Tags collapse
+    to `_uncategorized`, synopses are not rewritten, and no go_deeper links are
+    proposed. The result dict's `judge_used: bool` makes this visible.
+
     Returns:
         {"processed": int, "created": int, "merged": int,
-         "reactivated": int, "duration_seconds": float}
+         "reactivated": int, "duration_seconds": float, "judge_used": bool}
     """
     from sincron_brain import judge
     from sincron_brain.sleep import run_sleep
 
     config = get_config()
+    judge_used = judge.judge_available(config)
+    if not judge_used:
+        storage.write_audit(
+            config,
+            "sleep.using_fallback_decider",
+            reason="judge_api_key_missing",
+            api_key_env=config.judge.api_key_env,
+        )
     result = run_sleep(config, decide=judge.default_decider(config))
+    result["judge_used"] = judge_used
     storage.write_audit(config, "tool.sleep_now", **result)
     return result
 
 
 @mcp.tool()
 def stats() -> dict:
-    """Vault diagnostics: counts, score distribution, queue size.
+    """Vault diagnostics: counts, score distribution, queue size, judge status.
 
     Returns:
-        {total, tags, avg_score, high_score_count, draft_queue, vault_path}
+        {total, tags, avg_score, high_score_count, draft_queue, vault_path,
+         judge_status: {provider, model, api_key_env, api_key_present, ready}}
     """
+    from sincron_brain import judge
+
     config = get_config()
     with storage.open_db(config) as conn:
         base = storage.stats(conn)
@@ -480,6 +497,7 @@ def stats() -> dict:
     base["reactivation_queue"] = len(list(config.reactivation_dir.glob("*.json")))
     base["vault_path"] = str(config.vault_path)
     base["audit_log"] = str(config.audit_file)
+    base["judge_status"] = judge.judge_status(config)
     storage.write_audit(
         config,
         "tool.stats",
@@ -487,6 +505,7 @@ def stats() -> dict:
         tags=base["tags"],
         draft_queue=base["draft_queue"],
         reactivation_queue=base["reactivation_queue"],
+        judge_ready=base["judge_status"]["ready"],
     )
     return base
 

@@ -9,6 +9,7 @@ from importlib import resources
 from pathlib import Path
 from typing import Any
 
+from sincron_brain import judge as judge_module
 from sincron_brain import storage
 from sincron_brain.config import VaultConfig
 
@@ -117,6 +118,7 @@ def build_viewer_data(
             "audit_enabled": config.audit.enabled,
             "audit_retention_days": config.audit.retention_days,
         },
+        "judge_status": judge_module.judge_status(config),
         "branding": {
             "logo_data_uri": _logo_data_uri(),
             "developer": "Sincron IA",
@@ -361,6 +363,34 @@ def render_viewer_html(data: dict[str, Any]) -> str:
       color: var(--graphite);
       font-size: 12px;
       line-height: 1.45;
+    }}
+    .judge-card {{
+      margin: 14px 0 0;
+      padding: 12px 13px;
+      border-radius: var(--radius-ui);
+      border: 1px solid var(--line);
+      background: var(--panel);
+      font-size: 12px;
+      line-height: 1.45;
+      color: var(--graphite);
+    }}
+    .judge-card.ready {{
+      border-color: rgba(34, 139, 34, 0.45);
+      background: rgba(220, 245, 220, 0.5);
+    }}
+    .judge-card.fallback {{
+      border-color: rgba(237, 94, 10, 0.55);
+      background: rgba(251, 230, 214, 0.65);
+    }}
+    .judge-card b {{ display: block; margin-bottom: 4px; }}
+    .judge-card.ready b {{ color: #1f6f1f; }}
+    .judge-card.fallback b {{ color: var(--ember-500); }}
+    .judge-card code {{
+      font-family: ui-monospace, "SF Mono", Consolas, monospace;
+      font-size: 11px;
+      background: rgba(14, 15, 18, 0.06);
+      padding: 1px 4px;
+      border-radius: 4px;
     }}
     .stats {{
       display: grid;
@@ -778,6 +808,7 @@ def render_viewer_html(data: dict[str, Any]) -> str:
     </div>
     <p class="muted" id="vaultPath"></p>
     <p class="notice" id="viewerMode"></p>
+    <div id="judgeStatus"></div>
     <div class="stats" id="stats"></div>
     <div class="stack">
       <label>Busca <input id="search" type="search" placeholder="id, conteúdo, sinopse, tag"></label>
@@ -833,6 +864,25 @@ function init() {{
   if (modeBits.length) {{
     viewerMode.textContent = modeBits.join(' ');
     viewerMode.style.display = 'block';
+  }}
+  const judge = DATA.judge_status || {{}};
+  const judgeEl = document.getElementById('judgeStatus');
+  if (judge && judge.provider) {{
+    if (judge.ready) {{
+      judgeEl.innerHTML = `
+        <div class="judge-card ready">
+          <b>Judge ativo</b>
+          ${{esc(judge.provider)}}/${{esc(judge.model)}} · chave <code>${{esc(judge.api_key_env)}}</code> detectada.
+        </div>`;
+    }} else {{
+      judgeEl.innerHTML = `
+        <div class="judge-card fallback">
+          <b>Judge em fallback</b>
+          ${{esc(judge.provider)}}/${{esc(judge.model)}} · chave <code>${{esc(judge.api_key_env)}}</code> ausente.
+          Sleep indexa drafts em <code>_uncategorized</code> sem reescrever sinopse nem sugerir go_deeper.
+          Para ativar, exporte a chave no shell que inicia o MCP client antes de rodar <code>sleep_now()</code>.
+        </div>`;
+    }}
   }}
   document.getElementById('stats').innerHTML = [
     ['Memórias', DATA.stats.total],

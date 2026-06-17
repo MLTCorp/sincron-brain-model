@@ -53,6 +53,42 @@ def _write_initial_viewer(config: VaultConfig) -> Path:
     return write_viewer(config)
 
 
+def _print_judge_status(config: VaultConfig) -> None:
+    """Surface whether the sleep judge can actually run, or will fall back."""
+    from sincron_brain import judge
+
+    status = judge.judge_status(config)
+    console.print()
+    if status["ready"]:
+        console.print(
+            f"[bold]Judge:[/] [green]ready[/] · "
+            f"{status['provider']}/{status['model']} · "
+            f"key {status['api_key_env']} detected"
+        )
+    else:
+        console.print(
+            f"[bold]Judge:[/] [yellow]FALLBACK MODE[/] · "
+            f"{status['provider']}/{status['model']} · "
+            f"key {status['api_key_env']} [yellow]NOT set in this shell[/]"
+        )
+        console.print(
+            "[yellow]  Without the key, sleep will index drafts mechanically:[/]"
+        )
+        console.print(
+            "[yellow]  - Major Tags collapse to `_uncategorized`[/]"
+        )
+        console.print(
+            "[yellow]  - Synopses are not rewritten[/]"
+        )
+        console.print(
+            "[yellow]  - No go_deeper links are proposed[/]"
+        )
+        console.print(
+            f"[yellow]  Set it in the shell that starts your MCP client:[/] "
+            f'$env:{status["api_key_env"]} = "<your-key>"'
+        )
+
+
 def _create_vault(
     vault_path: Path,
     provider: str | None,
@@ -112,6 +148,7 @@ def init(
     console.print(f"  Index:  {config.index_db}")
     console.print(f"  Judge:  {config.judge.provider} / {config.judge.model}")
     _print_default_major_tags()
+    _print_judge_status(config)
     console.print()
     console.print("[bold]Connect a project to this vault:[/]")
     console.print(f'  sincron-brain connect --path "{vault_path}"')
@@ -159,6 +196,7 @@ def connect(
         console.print(f"[green]Agent instructions synced:[/] {instruction_file}")
     console.print(f"[green]Viewer ready:[/] {viewer_path}")
     _print_default_major_tags()
+    _print_judge_status(config)
     console.print()
     console.print("[bold]Next steps:[/]")
     console.print("  1. Restart your MCP client/agent.")
@@ -205,6 +243,7 @@ def stats() -> None:
     table.add_row("High-score (>=50)", str(s["high_score_count"]))
     table.add_row("Draft queue", str(len(list(config.draft_dir.glob("*.json")))))
     console.print(table)
+    _print_judge_status(config)
 
 
 @app.command()

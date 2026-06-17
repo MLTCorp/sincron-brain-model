@@ -12,6 +12,8 @@ from sincron_brain.judge import (
     _litellm_completion,
     build_messages,
     default_decider,
+    judge_available,
+    judge_status,
     make_judge,
     parse_decision,
 )
@@ -172,6 +174,45 @@ def test_default_decider_without_api_key_is_provider_agnostic(monkeypatch):
             ),
         )
         assert default_decider(cfg) is reconcile.create_only
+
+
+def test_judge_available_reflects_api_key_presence(monkeypatch):
+    cfg = VaultConfig(
+        vault_path=Path("/vault"),
+        judge=JudgeConfig(api_key_env="SBM_PROBE_KEY"),
+    )
+    monkeypatch.delenv("SBM_PROBE_KEY", raising=False)
+    assert judge_available(cfg) is False
+    monkeypatch.setenv("SBM_PROBE_KEY", "x")
+    assert judge_available(cfg) is True
+
+
+def test_judge_status_never_returns_the_key_value(monkeypatch):
+    cfg = VaultConfig(
+        vault_path=Path("/vault"),
+        judge=JudgeConfig(
+            provider="anthropic", model="claude-haiku-4-5", api_key_env="SBM_PROBE_KEY"
+        ),
+    )
+    monkeypatch.setenv("SBM_PROBE_KEY", "super-secret")
+    status = judge_status(cfg)
+    assert status["provider"] == "anthropic"
+    assert status["model"] == "claude-haiku-4-5"
+    assert status["api_key_env"] == "SBM_PROBE_KEY"
+    assert status["api_key_present"] is True
+    assert status["ready"] is True
+    assert "super-secret" not in str(status)
+
+
+def test_judge_status_marks_not_ready_without_key(monkeypatch):
+    cfg = VaultConfig(
+        vault_path=Path("/vault"),
+        judge=JudgeConfig(api_key_env="SBM_NOPE_KEY"),
+    )
+    monkeypatch.delenv("SBM_NOPE_KEY", raising=False)
+    status = judge_status(cfg)
+    assert status["api_key_present"] is False
+    assert status["ready"] is False
 
 
 def test_litellm_completion_routes_provider_and_model(monkeypatch):

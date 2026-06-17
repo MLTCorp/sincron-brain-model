@@ -156,6 +156,22 @@ def default_decider(config: VaultConfig) -> Decider:
     return reconcile.create_only
 
 
+def judge_available(config: VaultConfig) -> bool:
+    """Whether the configured judge can actually run, i.e. its API key is set."""
+    return bool(config.judge_api_key())
+
+
+def judge_status(config: VaultConfig) -> dict:
+    """Surface judge readiness for stats/viewer/connect — never returns the key value."""
+    return {
+        "provider": config.judge.provider,
+        "model": config.judge.model,
+        "api_key_env": config.judge.api_key_env,
+        "api_key_present": judge_available(config),
+        "ready": judge_available(config),
+    }
+
+
 def _litellm_completion(config: VaultConfig) -> Completion:
     def complete(messages: list[dict]) -> str:
         import litellm

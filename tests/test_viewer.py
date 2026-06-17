@@ -159,6 +159,23 @@ def test_write_viewer_can_include_memory_bodies_explicitly(tmp_path):
     assert '"summary_only": false' in html
 
 
+def test_build_viewer_data_includes_judge_status(tmp_path, monkeypatch):
+    config = make_config(tmp_path)
+    monkeypatch.delenv(config.judge.api_key_env, raising=False)
+    data = build_viewer_data(config)
+    assert data["judge_status"]["provider"] == config.judge.provider
+    assert data["judge_status"]["model"] == config.judge.model
+    assert data["judge_status"]["ready"] is False
+
+
+def test_write_viewer_renders_fallback_judge_card(tmp_path, monkeypatch):
+    config = make_config(tmp_path)
+    monkeypatch.delenv(config.judge.api_key_env, raising=False)
+    html = write_viewer(config).read_text(encoding="utf-8")
+    assert "Judge em fallback" in html
+    assert "judge-card" in html
+
+
 def test_render_viewer_escapes_script_end_tag():
     html = render_viewer_html(
         {

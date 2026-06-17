@@ -54,6 +54,10 @@ async def test_generic_mcp_client_can_run_memory_lifecycle(tmp_path):
         before = await _call_text(session, "stats")
         assert before["draft_queue"] == 0
         assert before["total"] == 0
+        assert before["judge_status"]["ready"] is False
+        assert before["judge_status"]["api_key_present"] is False
+        assert before["judge_status"]["provider"]
+        assert before["judge_status"]["model"]
 
         remembered = await _call_text(
             session,
@@ -72,6 +76,7 @@ async def test_generic_mcp_client_can_run_memory_lifecycle(tmp_path):
         indexed = await _call_text(session, "sleep_now")
         assert indexed["processed"] == 1
         assert indexed["created"] == 1
+        assert indexed["judge_used"] is False
 
         hits = await _call_text(session, "search", {"query": "agnostico", "limit": 5})
         if isinstance(hits, dict):
@@ -100,6 +105,8 @@ async def test_generic_mcp_client_can_run_memory_lifecycle(tmp_path):
         assert final["reactivation_queue"] == 0
 
     events = storage.read_audit(config)
-    assert "tool.remember_turn" in [event["event"] for event in events]
-    assert "tool.use_memories" in [event["event"] for event in events]
-    assert "sleep.memory_reactivated" in [event["event"] for event in events]
+    event_names = [event["event"] for event in events]
+    assert "tool.remember_turn" in event_names
+    assert "tool.use_memories" in event_names
+    assert "sleep.memory_reactivated" in event_names
+    assert "sleep.using_fallback_decider" in event_names
