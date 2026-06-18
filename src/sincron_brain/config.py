@@ -17,13 +17,24 @@ LLM_API_KEY_ENV = "LLM_API_KEY"
 LLM_PROVIDER_ENV = "LLM_PROVIDER"
 
 
+_DOTENV_LOADED_KEYS: set[str] = set()
+
+
 def load_dotenv(vault_path: Path) -> dict[str, str]:
-    """Read <vault>/.env into os.environ without clobbering shell-set values.
+    """Read <vault>/.env into os.environ.
 
     Format: KEY=VALUE per line. Lines starting with `#` and blank lines are
     ignored. Values may be wrapped in single or double quotes — quotes are
-    stripped. Variables already present in os.environ win, so the shell can
-    always override the file.
+    stripped.
+
+    Priority rules:
+      - Truly shell-set vars (set before the process saw any .env line) always
+        win, so the user can `$env:X=...` to override a stale .env value.
+      - Vars that were previously written to os.environ *by load_dotenv* are
+        considered file-owned and get refreshed on every reload. Without this,
+        editing the .env after the MCP server already started would never take
+        effect — the key would sit in os.environ from the first load and the
+        skip-if-already-set rule would mask the new value.
     """
     dotenv_path = vault_path / DOTENV_FILENAME
     loaded: dict[str, str] = {}
@@ -42,9 +53,10 @@ def load_dotenv(vault_path: Path) -> dict[str, str]:
             value = value[1:-1]
         if not key:
             continue
-        if key in os.environ:
+        if key in os.environ and key not in _DOTENV_LOADED_KEYS:
             continue
         os.environ[key] = value
+        _DOTENV_LOADED_KEYS.add(key)
         loaded[key] = value
     return loaded
 

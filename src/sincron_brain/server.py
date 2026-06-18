@@ -11,7 +11,15 @@ from mcp.server.fastmcp import FastMCP
 from platformdirs import user_data_dir
 
 from sincron_brain import storage
-from sincron_brain.config import VaultConfig, load_config
+from sincron_brain.config import (
+    DOTENV_FILENAME,
+    LLM_API_KEY_ENV,
+    LLM_PROVIDER_ENV,
+    PROVIDER_API_KEY_ENV,
+    PROVIDER_DEFAULT_MODEL,
+    VaultConfig,
+    load_config,
+)
 from sincron_brain.major_tags import default_major_tag_names_csv
 from sincron_brain.models import DraftItem, ReactivationEvent
 
@@ -497,6 +505,192 @@ def list_memories_by_date(date: str, field: str = "created", limit: int = 100) -
         memory_ids=[item["id"] for item in memories],
     )
     return {"date": date, "field": field, "memories": memories}
+
+
+def _provider_from_key_prefix(key: str) -> str | None:
+    """Same prefix sniffer the CLI uses, kept local to avoid importing the CLI."""
+    key = key.strip()
+    if not key:
+        return None
+    if key.startswith("sk-ant-"):
+        return "anthropic"
+    if key.startswith(("sk-proj-", "sk-svcacct-")):
+        return "openai"
+    if key.startswith("sk-"):
+        return "openai"
+    if key.startswith("AIza"):
+        return "google"
+    if key.startswith(("AKIA", "ASIA")):
+        return "bedrock"
+    return None
+
+
+def _write_judge_key_to_dotenv(config: VaultConfig, provider: str, api_key: str) -> Path:
+    """Update <vault>/.env to carry LLM_API_KEY/LLM_PROVIDER, replacing any prior value."""
+    dotenv_path = config.vault_path / DOTENV_FILENAME
+    existing_lines = (
+        dotenv_path.read_text(encoding="utf-8").splitlines()
+        if dotenv_path.exists()
+        else []
+    )
+    managed = {LLM_API_KEY_ENV: api_key, LLM_PROVIDER_ENV: provider}
+    new_lines: list[str] = []
+    seen: set[str] = set()
+    for line in existing_lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            new_lines.append(line)
+            continue
+        key = stripped.partition("=")[0].strip()
+        if key in managed:
+            new_lines.append(f"{key}={managed[key]}")
+            seen.add(key)
+        else:
+            new_lines.append(line)
+    for key, value in managed.items():
+        if key not in seen:
+            new_lines.append(f"{key}={value}")
+    dotenv_path.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+    storage._restrict_owner_access(dotenv_path)
+    return dotenv_path
+
+
+def _ping_judge(config: VaultConfig) -> dict:
+    """Run a minimal completion against the configured judge to confirm liveness."""
+    from sincron_brain import judge
+
+    if not judge.judge_available(config):
+        return {
+            "ready": False,
+            "error": "api_key_missing",
+            "message": (
+                f"No API key resolved. Edit {config.vault_path / DOTENV_FILENAME} or "
+                f"call set_judge_key(api_key)."
+            ),
+        }
+
+    try:
+        import time as _time
+
+        do_complete = judge._litellm_completion(config)
+        start = _time.monotonic()
+        raw = do_complete(
+            [
+                {"role": "system", "content": "Reply with the single word OK."},
+                {"role": "user", "content": "ping"},
+            ]
+        )
+        duration_ms = int((_time.monotonic() - start) * 1000)
+    except Exception as exc:
+        storage.write_audit(
+            config,
+            "judge.ping_failed",
+            error=type(exc).__name__,
+            error_message=str(exc)[:200],
+            provider=config.judge.provider,
+            model=config.judge.model,
+        )
+        return {
+            "ready": False,
+            "error": type(exc).__name__,
+            "message": str(exc)[:300],
+            "provider": config.judge.provider,
+            "model": config.judge.model,
+        }
+
+    storage.write_audit(
+        config,
+        "judge.ping_ok",
+        duration_ms=duration_ms,
+        provider=config.judge.provider,
+        model=config.judge.model,
+    )
+    return {
+        "ready": True,
+        "provider": config.judge.provider,
+        "model": config.judge.model,
+        "duration_ms": duration_ms,
+        "reply_preview": raw[:80],
+    }
+
+
+@mcp.tool()
+def set_judge_key(api_key: str, provider: str | None = None) -> dict:
+    """Persist a judge API key into the vault .env and verify it works.
+
+    Use this whenever the user provides an API key for the indexing judge —
+    do NOT edit the .env by hand. The tool detects the provider from the
+    key prefix (or accepts an explicit `provider` for opaque keys like
+    Mistral/Cohere/Voyage/Azure), writes both LLM_API_KEY and LLM_PROVIDER
+    to <vault>/.env, updates _config.toml so the judge points at the right
+    provider/model, and performs a real ping completion against the LLM to
+    confirm the credentials work end to end.
+
+    The API key value is never echoed back nor written to the audit log.
+
+    Returns:
+        {ready: bool, provider, model, duration_ms?, reply_preview?,
+         error?, message?, dotenv_path}
+    """
+    if not api_key or not api_key.strip():
+        return {"ready": False, "error": "empty_key", "message": "api_key is empty."}
+
+    api_key = api_key.strip()
+    provider = (provider or "").strip().lower() or _provider_from_key_prefix(api_key)
+    if not provider:
+        return {
+            "ready": False,
+            "error": "provider_unknown",
+            "message": (
+                "Could not infer provider from the key prefix. Pass `provider=...` "
+                f"with one of: {', '.join(PROVIDER_API_KEY_ENV)}."
+            ),
+        }
+    if provider not in PROVIDER_API_KEY_ENV:
+        return {
+            "ready": False,
+            "error": "provider_unsupported",
+            "message": f"Provider {provider!r} is not supported. "
+            f"Pick one of: {', '.join(PROVIDER_API_KEY_ENV)}.",
+        }
+
+    config = get_config()
+    config.judge.provider = provider
+    config.judge.model = PROVIDER_DEFAULT_MODEL[provider]
+    config.judge.api_key_env = PROVIDER_API_KEY_ENV[provider]
+    config.save()
+    dotenv_path = _write_judge_key_to_dotenv(config, provider, api_key)
+    _clear_config_cache()
+
+    storage.write_audit(
+        config,
+        "tool.set_judge_key",
+        provider=provider,
+        model=config.judge.model,
+        dotenv_path=str(dotenv_path),
+    )
+
+    fresh = get_config()
+    result = _ping_judge(fresh)
+    result["dotenv_path"] = str(dotenv_path)
+    return result
+
+
+@mcp.tool()
+def verify_judge() -> dict:
+    """Run a small completion against the configured judge to confirm liveness.
+
+    Use after editing .env by hand, after switching judge providers, or any
+    time the user wants to confirm cognitive indexing will actually work
+    before kicking off a sleep that costs tokens.
+
+    Returns:
+        {ready, provider, model, duration_ms, reply_preview} on success,
+        {ready=false, error, message} on failure.
+    """
+    _clear_config_cache()
+    config = get_config()
+    return _ping_judge(config)
 
 
 @mcp.tool()

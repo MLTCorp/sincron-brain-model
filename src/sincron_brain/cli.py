@@ -779,6 +779,15 @@ Use the `sincron-brain` MCP server as the project's long-term memory layer.
 - `remember()` and `remember_turn()` only queue drafts. The sleep job indexes drafts later with
   `sleep_now()` or the configured sleep routine, compiling conversation turns into contextual
   memories rather than raw transcripts.
+- When the user provides a judge API key (Anthropic, OpenAI, Gemini, Mistral, etc.), call
+  `set_judge_key(api_key, provider=None)` to persist it. NEVER write the key to `.env`,
+  `.mcp.json`, or any other file by hand — `set_judge_key` writes it to the vault `.env`,
+  reloads config, and validates the credential with a live ping. Treat its `ready: false`
+  response as a hard failure and report the `error`/`message` back to the user; do not
+  pretend indexing will work.
+- Run `verify_judge()` whenever the user asks "is the indexer working?" or before a costly
+  `sleep_now()`. It surfaces silent regressions (revoked key, wrong model, network error)
+  before tokens are spent.
 {MEMORY_INSTRUCTIONS_END}
 """
 
