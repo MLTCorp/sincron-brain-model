@@ -4,8 +4,29 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from pathlib import Path
 from typing import Annotated
+
+
+def _ensure_utf8_console() -> None:
+    """Stop Windows cp1252 from crashing prints that contain →, ·, — etc.
+
+    Python on Windows defaults sys.stdout/stderr to the legacy ANSI code page,
+    so rich.Console emits Unicode that raises UnicodeEncodeError on the
+    *last* print of an otherwise-successful CLI run. Reconfigure both streams
+    to UTF-8 with 'replace' so a missing glyph degrades to '?' instead of
+    aborting the process.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+            except (OSError, ValueError):
+                pass
+
+
+_ensure_utf8_console()
 
 import typer
 from platformdirs import user_data_dir
@@ -32,7 +53,7 @@ app = typer.Typer(
     help="Plug-and-play memory layer for AI agents. MCP server.",
     no_args_is_help=True,
 )
-console = Console()
+console = Console(soft_wrap=True, emoji=False)
 
 
 def _default_vault_path() -> Path:
