@@ -57,8 +57,8 @@ def test_build_viewer_data_includes_memory_tags_go_deeper_and_sleep(tmp_path):
     assert memories["a"]["score"] == 88
     assert memories["a"]["emotion_floor"] == 40
     assert memories["a"]["go_deeper"] == ["b"]
-    assert memories["a"]["content_omitted"] is True
-    assert memories["a"]["content"] == ""
+    assert memories["a"]["content_omitted"] is False
+    assert memories["a"]["content"] == "A API key fica no arquivo .env."
     assert data["branding"]["logo_data_uri"].startswith("data:image/jpeg;base64,")
     assert data["branding"]["developer"] == "Sincron IA"
     assert data["branding"]["author"] == "Matheus Massari"
@@ -87,8 +87,8 @@ def test_write_viewer_outputs_self_contained_html(tmp_path):
     assert "Autor Matheus Massari" in html
     assert "data:image/jpeg;base64," in html
     assert "viewer-data" in html
-    assert "Debug full body" not in html
-    assert "Corpos das memórias omitidos" in html
+    assert "Debug full body" in html
+    assert '"summary_only": false' in html
     assert 'data-tab="go-deeper"' in html
     assert "relation-grid" in html
     assert "Grafo de memórias" in html

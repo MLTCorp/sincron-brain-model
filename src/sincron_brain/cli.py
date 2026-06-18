@@ -531,11 +531,11 @@ def viewer(
         int | None,
         typer.Option("--limit", help="Maximum number of memories embedded in the HTML."),
     ] = None,
-    include_content: Annotated[
+    summary_only: Annotated[
         bool,
         typer.Option(
-            "--include-content",
-            help="Embed full memory bodies in the HTML snapshot. Use only for local inspection.",
+            "--summary-only",
+            help="Omit memory bodies (only synopses). Use when sharing the snapshot publicly.",
         ),
     ] = False,
 ) -> None:
@@ -544,7 +544,7 @@ def viewer(
 
     config = _load_or_die()
     try:
-        output_path = write_viewer(config, output, limit=limit, summary_only=not include_content)
+        output_path = write_viewer(config, output, limit=limit, summary_only=summary_only)
     except ValueError as e:
         console.print(f"[red]{e}[/]")
         raise typer.Exit(1) from None
@@ -552,10 +552,10 @@ def viewer(
     console.print(f"  {output_path}")
     if limit:
         console.print(f"  Limit: {limit} memories")
-    if include_content:
-        console.print("  Full memory bodies embedded. Keep this HTML local.")
+    if summary_only:
+        console.print("  Summary-only: memory bodies omitted.")
     else:
-        console.print("  Summary-only: memory bodies omitted. Use --include-content to embed them.")
+        console.print("  Full memory bodies embedded (local debug). Use --summary-only to omit them.")
 
 
 @app.command()

@@ -21,9 +21,17 @@ def write_viewer(
     config: VaultConfig,
     output: Path | None = None,
     limit: int | None = None,
-    summary_only: bool = True,
+    summary_only: bool = False,
 ) -> Path:
-    """Write a self-contained HTML snapshot for debugging a vault."""
+    """Write a self-contained HTML snapshot for debugging a vault.
+
+    summary_only defaults to False: the viewer is a local debug tool, the
+    vault `.gitignore` already excludes _viewer.html, and the .md bodies
+    sit next to the file anyway — so omitting content created friction
+    ("why can't I see what the memory says?") without preventing leaks.
+    Pass summary_only=True when the snapshot will be attached somewhere
+    public.
+    """
     output_path = (output or config.vault_path / VIEWER_FILENAME).expanduser().resolve()
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(
@@ -38,7 +46,7 @@ def write_viewer(
 def build_viewer_data(
     config: VaultConfig,
     limit: int | None = None,
-    summary_only: bool = True,
+    summary_only: bool = False,
 ) -> dict[str, Any]:
     """Collect memories, tags, go_deeper edges, queues, and audit-derived sleeps."""
     if limit is not None and limit <= 0:
@@ -965,7 +973,7 @@ function memoryChip(id) {{
 function renderMemoryDetail(m) {{
   if (!m) return '<div class="detail">Selecione uma memória.</div>';
   const go = (m.go_deeper || []).map(id => memoryChip(id)).join('') || '<span class="muted">Sem links</span>';
-  const content = m.content_omitted ? '<span class="muted">Conteúdo omitido neste snapshot. Gere novamente com --include-content para incluir os corpos das memórias.</span>' : esc(m.content);
+  const content = m.content_omitted ? '<span class="muted">Conteúdo omitido (modo --summary-only). Regere sem essa flag para incluir os corpos das memórias.</span>' : esc(m.content);
   return `<div class="detail">
     <h2>${{esc(m.synopsis || m.id)}}</h2>
     <div class="meta">
