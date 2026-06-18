@@ -46,6 +46,40 @@ def test_refresh_viewer_regenerates_existing_file(tmp_path):
     assert "Be precise and warm." in updated
 
 
+def test_sleep_now_refreshes_existing_viewer(tmp_path, monkeypatch):
+    """Regression: sleep_now used to mutate the vault (drain drafts, create or
+    merge memories) without telling the viewer, so `stats()` and the viewer
+    disagreed on the count until the next remember()/use_memories() touched it.
+    """
+    from sincron_brain.models import DraftItem
+    from sincron_brain import server
+
+    config = VaultConfig(vault_path=tmp_path)
+    storage.ensure_vault(config)
+    config.save()
+    monkeypatch.setenv("SINCRON_BRAIN_VAULT", str(tmp_path))
+    server._clear_config_cache()
+
+    viewer_path = write_viewer(config)
+    before = viewer_path.read_text(encoding="utf-8")
+
+    storage.write_draft(
+        config,
+        DraftItem(
+            id="d1",
+            content="Massari prefers brevity.",
+            source_type="user_message",
+        ),
+    )
+
+    result = server.sleep_now()
+
+    assert result["processed"] >= 1
+    after = viewer_path.read_text(encoding="utf-8")
+    assert after != before
+    assert "Massari" in after
+
+
 def test_refresh_viewer_failure_is_logged_not_raised(tmp_path, monkeypatch):
     config = make_config(tmp_path)
     write_viewer(config)

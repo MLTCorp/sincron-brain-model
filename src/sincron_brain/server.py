@@ -725,6 +725,7 @@ def sleep_now() -> dict:
     result = run_sleep(config, decide=judge.default_decider(config))
     result["judge_used"] = judge_used
     storage.write_audit(config, "tool.sleep_now", **result)
+    _refresh_viewer_if_exists(config)
     return result
 
 
