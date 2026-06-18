@@ -168,6 +168,7 @@ def judge_status(config: VaultConfig) -> dict:
         "model": config.judge.model,
         "api_key_env": config.judge.api_key_env,
         "api_key_present": judge_available(config),
+        "api_key_source": config.judge_api_key_source(),
         "ready": judge_available(config),
     }
 

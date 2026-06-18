@@ -12,6 +12,9 @@ from pydantic import BaseModel, Field
 
 CONFIG_FILENAME = "_config.toml"
 
+LLM_API_KEY_ENV = "LLM_API_KEY"
+LLM_PROVIDER_ENV = "LLM_PROVIDER"
+
 
 class JudgeConfig(BaseModel):
     """LLM-as-judge: handles sinopse, tag selection, Go Deeper, emotion weighting."""
@@ -100,7 +103,22 @@ class VaultConfig(BaseModel):
         return self.vault_path / "_audit.jsonl"
 
     def judge_api_key(self) -> str | None:
-        return os.environ.get(self.judge.api_key_env)
+        """Return the API key for the configured judge provider.
+
+        Looks at the generic LLM_API_KEY first (provider-agnostic), then falls
+        back to the provider-specific env var (e.g. ANTHROPIC_API_KEY). This
+        lets users opt into a single canonical env var without breaking
+        existing workflows that already export the provider-specific one.
+        """
+        return os.environ.get(LLM_API_KEY_ENV) or os.environ.get(self.judge.api_key_env)
+
+    def judge_api_key_source(self) -> str | None:
+        """Which env var was used for the key, or None if no key is set."""
+        if os.environ.get(LLM_API_KEY_ENV):
+            return LLM_API_KEY_ENV
+        if os.environ.get(self.judge.api_key_env):
+            return self.judge.api_key_env
+        return None
 
     def save(self) -> None:
         payload: dict = {

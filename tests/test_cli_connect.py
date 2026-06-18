@@ -2,8 +2,8 @@ import json
 
 from typer.testing import CliRunner
 
-from sincron_brain.cli import _detect_provider_from_env, app
-from sincron_brain.config import PROVIDER_API_KEY_ENV
+from sincron_brain.cli import _detect_provider_from_env, _detect_provider_from_key, app
+from sincron_brain.config import LLM_API_KEY_ENV, LLM_PROVIDER_ENV, PROVIDER_API_KEY_ENV
 
 runner = CliRunner()
 
@@ -300,6 +300,83 @@ def test_set_judge_requires_auto_or_provider(tmp_path):
 
     assert result.exit_code != 0
     assert "--auto" in result.output
+
+
+def test_detect_provider_from_key_recognises_anthropic_prefix():
+    assert _detect_provider_from_key("sk-ant-abc123") == "anthropic"
+
+
+def test_detect_provider_from_key_recognises_openai_variants():
+    assert _detect_provider_from_key("sk-proj-abc") == "openai"
+    assert _detect_provider_from_key("sk-svcacct-abc") == "openai"
+    assert _detect_provider_from_key("sk-1234") == "openai"
+
+
+def test_detect_provider_from_key_recognises_google_and_bedrock_prefixes():
+    assert _detect_provider_from_key("AIzaSyAbc") == "google"
+    assert _detect_provider_from_key("AKIAIOSFODNN7") == "bedrock"
+    assert _detect_provider_from_key("ASIAIOSFODNN7") == "bedrock"
+
+
+def test_detect_provider_from_key_returns_none_for_opaque_keys():
+    assert _detect_provider_from_key("opaque-mistral-token-1234") is None
+    assert _detect_provider_from_key("") is None
+
+
+def test_connect_uses_llm_api_key_with_anthropic_prefix(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    vault = tmp_path / "memory"
+    project.mkdir()
+    for env_var in PROVIDER_API_KEY_ENV.values():
+        monkeypatch.delenv(env_var, raising=False)
+    monkeypatch.delenv(LLM_PROVIDER_ENV, raising=False)
+    monkeypatch.setenv(LLM_API_KEY_ENV, "sk-ant-test-key")
+
+    result = runner.invoke(
+        app, ["connect", "--path", str(vault), "--project", str(project)]
+    )
+
+    assert result.exit_code == 0
+    config_text = (vault / "_config.toml").read_text(encoding="utf-8")
+    assert 'provider = "anthropic"' in config_text
+    assert "looks like anthropic key" in result.output
+
+
+def test_connect_uses_llm_api_key_with_explicit_llm_provider(tmp_path, monkeypatch):
+    """Opaque keys (Cohere, Mistral, Voyage) need LLM_PROVIDER to disambiguate."""
+    project = tmp_path / "project"
+    vault = tmp_path / "memory"
+    project.mkdir()
+    for env_var in PROVIDER_API_KEY_ENV.values():
+        monkeypatch.delenv(env_var, raising=False)
+    monkeypatch.setenv(LLM_API_KEY_ENV, "opaque-token")
+    monkeypatch.setenv(LLM_PROVIDER_ENV, "mistral")
+
+    result = runner.invoke(
+        app, ["connect", "--path", str(vault), "--project", str(project)]
+    )
+
+    assert result.exit_code == 0
+    config_text = (vault / "_config.toml").read_text(encoding="utf-8")
+    assert 'provider = "mistral"' in config_text
+
+
+def test_judge_api_key_prefers_llm_api_key_over_provider_specific(tmp_path, monkeypatch):
+    """LLM_API_KEY is the canonical env var. Provider-specific is fallback."""
+    project = tmp_path / "project"
+    vault = tmp_path / "memory"
+    project.mkdir()
+    for env_var in PROVIDER_API_KEY_ENV.values():
+        monkeypatch.delenv(env_var, raising=False)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "legacy-specific")
+    runner.invoke(app, ["connect", "--path", str(vault), "--project", str(project)])
+
+    monkeypatch.setenv(LLM_API_KEY_ENV, "canonical-generic")
+    from sincron_brain.config import load_config
+
+    config = load_config(vault)
+    assert config.judge_api_key() == "canonical-generic"
+    assert config.judge_api_key_source() == LLM_API_KEY_ENV
 
 
 def test_connect_fallback_message_lists_all_provider_envs(tmp_path, monkeypatch):

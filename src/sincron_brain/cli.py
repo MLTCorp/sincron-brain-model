@@ -14,6 +14,8 @@ from rich.table import Table
 
 from sincron_brain import storage
 from sincron_brain.config import (
+    LLM_API_KEY_ENV,
+    LLM_PROVIDER_ENV,
     PROVIDER_API_KEY_ENV,
     PROVIDER_DEFAULT_MODEL,
     JudgeConfig,
@@ -63,10 +65,11 @@ def _print_judge_status(config: VaultConfig) -> None:
     status = judge.judge_status(config)
     console.print()
     if status["ready"]:
+        key_label = status.get("api_key_source") or status["api_key_env"]
         console.print(
             f"[bold]Judge:[/] [green]ready[/] · "
             f"{status['provider']}/{status['model']} · "
-            f"key {status['api_key_env']} detected"
+            f"key {key_label} detected"
         )
         console.print(
             "  To switch judge: [bold]sincron-brain set-judge --provider <name>[/] "
@@ -84,31 +87,71 @@ def _print_judge_status(config: VaultConfig) -> None:
             "[yellow]    Major Tags collapse to `_uncategorized`, synopses are not "
             "rewritten, no go_deeper links are proposed.[/]"
         )
-        console.print("[yellow]  To enable cognitive indexing:[/]")
+        console.print("[yellow]  To enable cognitive indexing, do ONE of:[/]")
         console.print(
-            "[yellow]    1. Export ONE provider key in this shell (any of):[/]"
+            f"[yellow]    A) Generic (recommended) — export {LLM_API_KEY_ENV}:[/]"
         )
         console.print(
-            "       "
-            + ", ".join(PROVIDER_API_KEY_ENV.values())
+            f'         $env:{LLM_API_KEY_ENV} = "<your-key>"'
         )
-        if any_other_key:
-            console.print(
-                "[yellow]    2. Run:[/] sincron-brain set-judge --auto  "
-                "[yellow](will pick the provider whose key you set)[/]"
-            )
-        else:
-            console.print(
-                "[yellow]    2. Run:[/] sincron-brain set-judge --auto"
-            )
+        console.print(
+            "[yellow]       The provider is detected from the key prefix "
+            "(sk-ant-* → Anthropic, sk-* → OpenAI, AIza* → Gemini, AKIA*/ASIA* → "
+            f"Bedrock). For other providers, also set {LLM_PROVIDER_ENV}=<name>.[/]"
+        )
+        console.print(
+            "[yellow]    B) Provider-specific env var — pick one of:[/]"
+        )
+        console.print("       " + ", ".join(PROVIDER_API_KEY_ENV.values()))
+        console.print(
+            "[yellow]    Then run:[/] sincron-brain set-judge --auto  "
+            "[yellow](applies whichever you set)[/]"
+        )
         console.print(
             f"[yellow]    Or pick explicitly:[/] sincron-brain set-judge --provider <name>  "
             f"(supported: {', '.join(PROVIDER_API_KEY_ENV.keys())})"
         )
 
 
+def _detect_provider_from_key(key: str) -> str | None:
+    """Best-effort detection of the provider from the API key's known prefix.
+
+    Returns None for providers whose keys don't carry a distinguishable shape
+    (Mistral, Cohere, Voyage, Azure, Ollama, custom) — for those the user
+    must also export LLM_PROVIDER or rely on the provider-specific env var.
+    """
+    key = key.strip()
+    if not key:
+        return None
+    if key.startswith("sk-ant-"):
+        return "anthropic"
+    if key.startswith(("sk-proj-", "sk-svcacct-")):
+        return "openai"
+    if key.startswith("sk-"):
+        return "openai"
+    if key.startswith("AIza"):
+        return "google"
+    if key.startswith(("AKIA", "ASIA")):
+        return "bedrock"
+    return None
+
+
 def _detect_provider_from_env() -> str | None:
-    """Pick the first supported provider whose API key env var is already set."""
+    """Pick a provider from the env.
+
+    Priority:
+      1. LLM_PROVIDER (paired with LLM_API_KEY) — explicit canonical path.
+      2. LLM_API_KEY whose prefix uniquely identifies a provider.
+      3. First supported provider whose specific env var is set (legacy).
+    """
+    canonical_key = os.environ.get(LLM_API_KEY_ENV, "")
+    canonical_provider = os.environ.get(LLM_PROVIDER_ENV, "").strip().lower()
+    if canonical_provider in PROVIDER_API_KEY_ENV and canonical_key:
+        return canonical_provider
+    if canonical_key:
+        sniffed = _detect_provider_from_key(canonical_key)
+        if sniffed is not None:
+            return sniffed
     for provider, env_var in PROVIDER_API_KEY_ENV.items():
         if os.environ.get(env_var):
             return provider
@@ -132,6 +175,17 @@ def _judge_provider_override() -> str | None:
 def _judge_model_override() -> str | None:
     value = os.environ.get(JUDGE_MODEL_OVERRIDE_ENV, "").strip()
     return value or None
+
+
+def _describe_detection_source(provider: str) -> str:
+    """Explain in plain words which env var caused the detection — used in connect output."""
+    canonical_key = os.environ.get(LLM_API_KEY_ENV, "")
+    canonical_provider = os.environ.get(LLM_PROVIDER_ENV, "").strip().lower()
+    if canonical_key and canonical_provider == provider:
+        return f"{LLM_API_KEY_ENV} + {LLM_PROVIDER_ENV}={provider}"
+    if canonical_key and _detect_provider_from_key(canonical_key) == provider:
+        return f"{LLM_API_KEY_ENV} (looks like {provider} key)"
+    return f"{PROVIDER_API_KEY_ENV[provider]} in the environment"
 
 
 def _apply_judge_config(config: VaultConfig, provider: str, model: str | None = None) -> None:
@@ -160,9 +214,9 @@ def _create_vault(
         )
     elif detected:
         chosen_provider = detected
+        source = _describe_detection_source(detected)
         console.print(
-            f"[green]Detected[/] {PROVIDER_API_KEY_ENV[detected]} in the environment — "
-            f"using [bold]{detected}[/] as the judge provider."
+            f"[green]Detected[/] {source} — using [bold]{detected}[/] as the judge provider."
         )
     elif yes:
         chosen_provider = next(iter(PROVIDER_API_KEY_ENV))
