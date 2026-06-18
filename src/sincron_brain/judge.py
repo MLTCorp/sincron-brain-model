@@ -14,15 +14,19 @@ response never breaks sleep.
 from __future__ import annotations
 
 import json
+import time
 from collections.abc import Callable
 from typing import Any
 
-from sincron_brain import reconcile
+from sincron_brain import reconcile, storage
 from sincron_brain.config import VaultConfig
 from sincron_brain.major_tags import major_tag_prompt_guide
 from sincron_brain.models import DraftItem
 from sincron_brain.reconcile import Candidate, Decider, Decision
 from sincron_brain.tags import tag_policy_prompt_guide
+
+JUDGE_TIMEOUT_SECONDS = 30
+JUDGE_MAX_RETRIES = 1
 
 Completion = Callable[[list[dict]], str]
 
@@ -152,10 +156,33 @@ def make_judge(config: VaultConfig, complete: Completion | None = None) -> Decid
     do_complete = complete or _litellm_completion(config)
 
     def decide(draft: DraftItem, candidates: list[Candidate]) -> Decision:
+        start = time.monotonic()
         try:
             raw = do_complete(build_messages(draft, candidates))
-        except Exception:
+        except Exception as exc:
+            duration_ms = int((time.monotonic() - start) * 1000)
+            storage.write_audit(
+                config,
+                "judge.completion_failed",
+                draft_id=draft.id,
+                duration_ms=duration_ms,
+                error=type(exc).__name__,
+                error_message=str(exc)[:200],
+                provider=config.judge.provider,
+                model=config.judge.model,
+                candidates=len(candidates),
+            )
             return Decision(action="create")
+        duration_ms = int((time.monotonic() - start) * 1000)
+        storage.write_audit(
+            config,
+            "judge.completion",
+            draft_id=draft.id,
+            duration_ms=duration_ms,
+            provider=config.judge.provider,
+            model=config.judge.model,
+            candidates=len(candidates),
+        )
         return parse_decision(raw, candidates)
 
     return decide
@@ -195,6 +222,8 @@ def _litellm_completion(config: VaultConfig) -> Completion:
             api_key=config.judge_api_key(),
             max_tokens=config.judge.max_tokens,
             temperature=0,
+            timeout=JUDGE_TIMEOUT_SECONDS,
+            num_retries=JUDGE_MAX_RETRIES,
         )
         return response.choices[0].message.content or ""
 

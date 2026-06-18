@@ -151,8 +151,11 @@ def test_judge_returns_create_from_injected_llm():
     assert d.synopsis == "S"
 
 
-def test_judge_provider_failure_falls_back_to_safe_create():
-    cfg = VaultConfig(vault_path=Path("/vault"))
+def test_judge_provider_failure_falls_back_to_safe_create(tmp_path):
+    cfg = VaultConfig(vault_path=tmp_path)
+    from sincron_brain import storage as _storage
+
+    _storage.ensure_vault(cfg)
 
     def raise_provider_error(_messages):
         raise RuntimeError("provider unavailable")
@@ -162,6 +165,26 @@ def test_judge_provider_failure_falls_back_to_safe_create():
 
     assert d.action == "create"
     assert d.major_tags == []
+    events = [e["event"] for e in _storage.read_audit(cfg)]
+    assert "judge.completion_failed" in events
+
+
+def test_judge_records_completion_duration(tmp_path):
+    cfg = VaultConfig(vault_path=tmp_path)
+    from sincron_brain import storage as _storage
+
+    _storage.ensure_vault(cfg)
+    raw = '{"action":"create","major_tags":["soul"]}'
+    decide = make_judge(cfg, complete=lambda _: raw)
+
+    decide(DraftItem(id="d", content="x"), _cands())
+
+    events = _storage.read_audit(cfg)
+    completion = next(e for e in events if e["event"] == "judge.completion")
+    assert completion["draft_id"] == "d"
+    assert "duration_ms" in completion
+    assert completion["provider"] == cfg.judge.provider
+    assert completion["model"] == cfg.judge.model
 
 
 def test_default_decider_without_api_key_is_create_only():
