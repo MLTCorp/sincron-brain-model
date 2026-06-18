@@ -151,6 +151,32 @@ def test_load_dotenv_refreshes_keys_it_previously_wrote(tmp_path, monkeypatch):
     assert os.environ[LLM_API_KEY_ENV] == "second"
 
 
+def test_verify_judge_auto_corrects_provider_when_dotenv_key_mismatches_config(
+    tmp_path, monkeypatch
+):
+    """Regression: the user pasted an sk-proj- (OpenAI) key but the config
+    still pointed at anthropic from the install placeholder, so verify_judge
+    pinged Anthropic with an OpenAI key and reported a misleading error. Now
+    verify_judge sniffs the key, syncs config.judge.provider, and persists
+    before pinging.
+    """
+    _bootstrap_vault(tmp_path, monkeypatch)
+    monkeypatch.setenv(LLM_API_KEY_ENV, "sk-proj-test-openai-key")
+    monkeypatch.setattr(
+        "sincron_brain.judge._litellm_completion",
+        lambda _config: (lambda _msgs: "OK"),
+    )
+
+    result = server.verify_judge()
+
+    assert result["ready"] is True
+    assert result["provider"] == "openai"
+    cfg_text = (tmp_path / "_config.toml").read_text(encoding="utf-8")
+    assert 'provider = "openai"' in cfg_text
+    events = [e["event"] for e in storage.read_audit(server.get_config())]
+    assert "judge.provider_auto_corrected" in events
+
+
 def test_load_dotenv_does_not_clobber_shell_set_values(tmp_path, monkeypatch):
     dotenv = tmp_path / DOTENV_FILENAME
     config_module._DOTENV_LOADED_KEYS.discard(LLM_API_KEY_ENV)

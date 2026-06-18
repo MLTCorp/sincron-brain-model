@@ -555,6 +555,37 @@ def _write_judge_key_to_dotenv(config: VaultConfig, provider: str, api_key: str)
     return dotenv_path
 
 
+def _sync_provider_to_key(config: VaultConfig) -> VaultConfig:
+    """Reconcile config.judge.provider with whatever LLM_API_KEY actually is.
+
+    When the user (or an early-session agent) only edited the vault `.env` and
+    never called set_judge_key, _config.toml is still pointing at the install
+    placeholder (anthropic). Pinging that provider with, say, an sk-proj- key
+    fails for the wrong reason and confuses the diagnosis. Sniff the key's
+    prefix and, if it implies a different provider than what's configured,
+    rewrite the judge section and persist it before pinging.
+    """
+    key = config.judge_api_key()
+    if not key:
+        return config
+    sniffed = _provider_from_key_prefix(key)
+    if sniffed is None or sniffed == config.judge.provider:
+        return config
+    storage.write_audit(
+        config,
+        "judge.provider_auto_corrected",
+        previous_provider=config.judge.provider,
+        new_provider=sniffed,
+        reason="LLM_API_KEY prefix did not match configured provider",
+    )
+    config.judge.provider = sniffed
+    config.judge.model = PROVIDER_DEFAULT_MODEL[sniffed]
+    config.judge.api_key_env = PROVIDER_API_KEY_ENV[sniffed]
+    config.save()
+    _clear_config_cache()
+    return get_config()
+
+
 def _ping_judge(config: VaultConfig) -> dict:
     """Run a minimal completion against the configured judge to confirm liveness."""
     from sincron_brain import judge
@@ -568,6 +599,8 @@ def _ping_judge(config: VaultConfig) -> dict:
                 f"call set_judge_key(api_key)."
             ),
         }
+
+    config = _sync_provider_to_key(config)
 
     try:
         import time as _time
