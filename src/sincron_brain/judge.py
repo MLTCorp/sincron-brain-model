@@ -95,7 +95,19 @@ SYSTEM_PROMPT = (
     "- MERGE preserva a major_tag da candidata. Se você acha que o assunto novo "
     "pertence a outro major_tag, então NÃO é merge — é create + opcionalmente "
     "go_deeper apontando para a candidata. Em merge, omita `major_tags` ou "
-    "repita a major_tag da candidata; nunca proponha uma diferente."
+    "repita a major_tag da candidata; nunca proponha uma diferente.\n"
+    "- go_deeper SÓ pode citar IDs que aparecem na lista MEMÓRIAS EXISTENTES "
+    "CANDIDATAS. Nunca invente IDs, nunca reescreva IDs, nunca cite o ID da "
+    "própria memória sendo criada. IDs inventados são descartados e geram "
+    "alerta no audit.\n"
+    "- Use go_deeper quando: (a) o assunto continua/desenvolve um fato já "
+    "presente numa candidate de major_tag DIFERENTE (alternativa ao merge "
+    "cross-major-tag); (b) há candidate de major_tag diferente cujo contexto "
+    "enriquece a nova memória sem caber dentro dela. Não use como rede de "
+    "associações fracas.\n"
+    "- Cap sugerido: até 3 IDs por go_deeper. Vizinhos semânticos restantes "
+    "são preenchidos automaticamente pelo sistema (auto-FTS), então prefira "
+    "poucos links de alta relevância a muitos links fracos."
 )
 
 

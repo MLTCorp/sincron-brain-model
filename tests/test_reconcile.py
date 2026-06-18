@@ -181,6 +181,8 @@ def test_reconcile_decision_tags_take_precedence_over_hint_tags(tmp_path):
 def test_reconcile_merge_enriches_without_duplicating(tmp_path):
     config = make_config(tmp_path)
     with storage.open_db(config) as conn:
+        seed(config, conn, id="luizao", major_tags=["pessoas"], synopsis="Luizão")
+        seed(config, conn, id="cacau", major_tags=["pessoas"], synopsis="Cacau")
         seed(config, conn, id="a", major_tags=["pessoas"], score=40,
              synopsis="Mateus", content="Cofundador.", go_deeper=["luizao"])
         draft = DraftItem(id="d", content="Casado com a Cacau.", hint_tags=["pessoas"])
@@ -197,9 +199,9 @@ def test_reconcile_merge_enriches_without_duplicating(tmp_path):
             reconcile.reconcile_draft(conn, draft, config, _single(decide))
         )
         assert outcome == "merged"
-        assert count(conn) == 1  # no duplicate created
+        assert count(conn) == 3  # the two seeds + the target
         assert "Cofundador." in mem.content and "Cacau" in mem.content  # appended, not replaced
-        assert set(mem.go_deeper) == {"luizao", "cacau"}  # unioned
+        assert {"luizao", "cacau"} <= set(mem.go_deeper)  # both kept (auto-FTS may add more)
         assert mem.score == config.score.initial
 
 
@@ -409,6 +411,199 @@ def test_reconcile_dedups_decisions_with_same_major_tag(tmp_path):
     assert len(results) == 1
     events = [e["event"] for e in storage.read_audit(config)]
     assert "sleep.decision_deduped" in events
+
+
+def test_reconcile_drops_dead_go_deeper_references(tmp_path):
+    """The judge can hallucinate IDs; reconcile drops them and audits."""
+    config = make_config(tmp_path)
+    draft = DraftItem(id="d", content="Texto novo")
+
+    def decide(_draft, _cands):
+        return Decision(
+            action="create",
+            major_tags=["projects"],
+            synopsis="Memória bem comprida com bastante texto pra passar do mínimo de chars.",
+            content="Conteúdo.",
+            go_deeper=["does-not-exist-xyz"],
+        )
+
+    with storage.open_db(config) as conn:
+        _, mem = _only(
+            reconcile.reconcile_draft(conn, draft, config, _single(decide))
+        )
+
+    assert "does-not-exist-xyz" not in mem.go_deeper
+    events = [e["event"] for e in storage.read_audit(config)]
+    assert "go_deeper.dropped_dead_reference" in events
+
+
+def test_reconcile_drops_self_reference_in_go_deeper(tmp_path):
+    config = make_config(tmp_path)
+    draft = DraftItem(id="d", content="Texto novo")
+
+    captured_id: dict = {}
+
+    def decide(_draft, _cands):
+        return Decision(
+            action="create",
+            major_tags=["projects"],
+            synopsis="Memória bem comprida com bastante texto pra passar do mínimo de chars.",
+            content="Conteúdo.",
+            go_deeper=[],
+        )
+
+    with storage.open_db(config) as conn:
+        # We can't predict the generated ID, so first create the memory, then
+        # rebuild with a self-reference baked in via a follow-up reconcile cycle.
+        _, mem = _only(
+            reconcile.reconcile_draft(conn, draft, config, _single(decide))
+        )
+        captured_id["id"] = mem.id
+
+        def decide_self(_draft, _cands):
+            return Decision(
+                action="merge",
+                target_id=captured_id["id"],
+                synopsis="Mais texto longo o suficiente pra passar o guard.",
+                content="Mais conteúdo.",
+                go_deeper=[captured_id["id"]],
+            )
+
+        followup_draft = DraftItem(id="d2", content="Segundo turno.")
+        _, mem2 = _only(
+            reconcile.reconcile_draft(conn, followup_draft, config, _single(decide_self))
+        )
+
+    assert captured_id["id"] not in mem2.go_deeper
+    events = [e["event"] for e in storage.read_audit(config)]
+    assert "go_deeper.self_reference_dropped" in events
+
+
+def test_reconcile_auto_extends_go_deeper_with_fts_candidates(tmp_path):
+    """When the judge omits a candidate that's clearly semantically close, the
+    reconcile appends up to AUTO_FTS_GO_DEEPER_LIMIT of them automatically."""
+    config = make_config(tmp_path)
+    with storage.open_db(config) as conn:
+        seed(
+            config,
+            conn,
+            id="seed-projeto-x",
+            major_tags=["projects"],
+            synopsis="Projeto X é uma plataforma de pagamentos",
+            content="Resumo do projeto x.",
+            tags=["projeto_x"],
+        )
+        seed(
+            config,
+            conn,
+            id="seed-billing",
+            major_tags=["projects"],
+            synopsis="Projeto X billing decisions",
+            content="Decisões financeiras do projeto x.",
+            tags=["projeto_x"],
+        )
+
+    draft = DraftItem(
+        id="d",
+        content="Projeto X também recebeu nova feature de webhooks.",
+        hint_tags=["projeto_x"],
+    )
+
+    def decide(_draft, _cands):
+        return Decision(
+            action="create",
+            major_tags=["projects"],
+            synopsis="Nova feature de webhooks no projeto X, integra com sistema externo.",
+            content="Detalhes da feature.",
+            go_deeper=[],
+        )
+
+    with storage.open_db(config) as conn:
+        _, mem = _only(
+            reconcile.reconcile_draft(conn, draft, config, _single(decide))
+        )
+
+    assert len(mem.go_deeper) >= 1
+    assert "seed-projeto-x" in mem.go_deeper or "seed-billing" in mem.go_deeper
+    events = [e["event"] for e in storage.read_audit(config)]
+    assert "go_deeper.auto_fts_added" in events
+
+
+def test_reconcile_applies_reciprocity_back_edges(tmp_path):
+    """A → B creates B → A automatically so use_memories(B) sees A too."""
+    config = make_config(tmp_path)
+    with storage.open_db(config) as conn:
+        seed(
+            config,
+            conn,
+            id="target-mem",
+            major_tags=["projects"],
+            synopsis="Memória alvo da reciprocidade",
+            content="Conteúdo.",
+        )
+
+    draft = DraftItem(id="d", content="Texto novo")
+
+    def decide(_draft, _cands):
+        return Decision(
+            action="create",
+            major_tags=["projects"],
+            synopsis="Memória nova que aponta para target-mem via go_deeper explícito.",
+            content="Conteúdo.",
+            go_deeper=["target-mem"],
+        )
+
+    with storage.open_db(config) as conn:
+        _, new_mem = _only(
+            reconcile.reconcile_draft(conn, draft, config, _single(decide))
+        )
+        target_row = conn.execute(
+            "SELECT go_deeper FROM memories WHERE id = ?", ("target-mem",)
+        ).fetchone()
+
+    import json as _json
+
+    target_go_deeper = _json.loads(target_row["go_deeper"])
+    assert new_mem.id in target_go_deeper
+    events = [e["event"] for e in storage.read_audit(config)]
+    assert "go_deeper.reciprocity_added" in events
+
+
+def test_reconcile_caps_go_deeper_per_memory(tmp_path):
+    """A memory with many proposed go_deeper IDs gets capped at MAX_GO_DEEPER_PER_MEMORY."""
+    config = make_config(tmp_path)
+    with storage.open_db(config) as conn:
+        for i in range(reconcile.MAX_GO_DEEPER_PER_MEMORY + 3):
+            seed(
+                config,
+                conn,
+                id=f"sibling-{i}",
+                major_tags=["projects"],
+                synopsis=f"Sibling {i}",
+            )
+
+    draft = DraftItem(id="d", content="x")
+
+    def decide(_draft, _cands):
+        return Decision(
+            action="create",
+            major_tags=["projects"],
+            synopsis="Memória com lista enorme de go_deeper, esperando o cap por memória.",
+            content="Conteúdo.",
+            go_deeper=[
+                f"sibling-{i}"
+                for i in range(reconcile.MAX_GO_DEEPER_PER_MEMORY + 3)
+            ],
+        )
+
+    with storage.open_db(config) as conn:
+        _, mem = _only(
+            reconcile.reconcile_draft(conn, draft, config, _single(decide))
+        )
+
+    assert len(mem.go_deeper) == reconcile.MAX_GO_DEEPER_PER_MEMORY
+    events = [e["event"] for e in storage.read_audit(config)]
+    assert "go_deeper.capped" in events
 
 
 def test_reconcile_rejects_thin_decisions_when_decomposing(tmp_path):

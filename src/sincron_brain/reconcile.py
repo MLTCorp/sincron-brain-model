@@ -51,6 +51,8 @@ Decider = Callable[[DraftItem, list[Candidate]], list[Decision]]
 
 MAX_DECISIONS_PER_DRAFT = 4
 MIN_SYNOPSIS_CHARS = 40
+MAX_GO_DEEPER_PER_MEMORY = 6
+AUTO_FTS_GO_DEEPER_LIMIT = 3
 
 
 def create_only(draft: DraftItem, candidates: list[Candidate]) -> list[Decision]:
@@ -105,6 +107,13 @@ def reconcile_draft(
     persona in the same message). Each decision becomes its own memory; the
     same merge/cross-major-tag guards apply per decision. Returns a list of
     (outcome, memory) tuples so the sleep job can audit each individually.
+
+    For every resulting memory:
+      - go_deeper IDs from the judge are validated (dead refs and
+        self-references dropped, capped at MAX_GO_DEEPER_PER_MEMORY)
+      - up to AUTO_FTS_GO_DEEPER_LIMIT extra IDs from the candidates list are
+        appended, since find_candidates already returned semantic neighbours
+      - reciprocity is materialised (B.go_deeper gains A when A links B)
     """
     candidates = [] if decide is create_only else find_candidates(conn, draft, config)
     raw_decisions = decide(draft, candidates) or []
@@ -112,6 +121,7 @@ def reconcile_draft(
 
     results: list[tuple[str, Memory]] = []
     for decision in decisions:
+        merge_target_id = decision.target_id if decision.action == "merge" else None
         if decision.action == "merge" and decision.target_id:
             target = _load(conn, config, decision.target_id)
             if (
@@ -120,15 +130,191 @@ def reconcile_draft(
                 and not _crosses_major_tag(target, decision)
             ):
                 merged = _apply_merge(target, decision, config)
+                merged.go_deeper = _finalise_go_deeper(
+                    merged.id,
+                    merged.go_deeper,
+                    candidates,
+                    conn,
+                    draft,
+                    merge_target_id,
+                    config,
+                )
                 storage.write_memory(config, merged, conn)
                 results.append(("merged", merged))
                 continue
 
         new = _build_new(draft, decision, config)
+        new.go_deeper = _finalise_go_deeper(
+            new.id,
+            new.go_deeper,
+            candidates,
+            conn,
+            draft,
+            merge_target_id,
+            config,
+        )
         storage.write_memory(config, new, conn)
         results.append(("created", new))
 
+    _apply_reciprocity(results, conn, config)
+
     return results
+
+
+def _finalise_go_deeper(
+    source_id: str,
+    raw_ids: list[str],
+    candidates: list[Candidate],
+    conn,
+    draft: DraftItem,
+    merge_target_id: str | None,
+    config: VaultConfig,
+) -> list[str]:
+    """Auto-extend with FTS neighbours, then drop dead/self and cap."""
+    extended = _auto_extend_go_deeper(
+        list(raw_ids), candidates, merge_target_id, source_id, draft, config
+    )
+    return _clean_go_deeper(extended, conn, source_id, draft.id, config)
+
+
+def _auto_extend_go_deeper(
+    base_ids: list[str],
+    candidates: list[Candidate],
+    merge_target_id: str | None,
+    source_id: str,
+    draft: DraftItem,
+    config: VaultConfig,
+) -> list[str]:
+    """Append top-K FTS-neighbour IDs to base_ids without duplicates.
+
+    The judge already saw the same candidates, so anything it left out either
+    didn't belong or was forgotten — promoting them automatically gives the
+    graph a layer of semantic connectivity without spending another LLM call.
+    """
+    if not candidates:
+        return base_ids
+    seen = set(base_ids)
+    added: list[str] = []
+    for candidate in candidates:
+        if len(added) >= AUTO_FTS_GO_DEEPER_LIMIT:
+            break
+        cid = candidate.id
+        if cid in seen or cid == merge_target_id or cid == source_id:
+            continue
+        added.append(cid)
+        seen.add(cid)
+    if added:
+        storage.write_audit(
+            config,
+            "go_deeper.auto_fts_added",
+            draft_id=draft.id,
+            source_id=source_id,
+            added_ids=added,
+        )
+    return [*base_ids, *added]
+
+
+def _clean_go_deeper(
+    ids: list[str],
+    conn,
+    source_id: str,
+    draft_id: str,
+    config: VaultConfig,
+) -> list[str]:
+    """Drop self-references, dead references, and apply the per-memory cap."""
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for raw_id in ids:
+        if not isinstance(raw_id, str):
+            continue
+        candidate_id = raw_id.strip()
+        if not candidate_id or candidate_id in seen:
+            continue
+        seen.add(candidate_id)
+        if candidate_id == source_id:
+            storage.write_audit(
+                config,
+                "go_deeper.self_reference_dropped",
+                memory_id=source_id,
+                draft_id=draft_id,
+            )
+            continue
+        deduped.append(candidate_id)
+
+    if not deduped:
+        return []
+
+    placeholders = ",".join(["?"] * len(deduped))
+    existing = {
+        row[0]
+        for row in conn.execute(
+            f"SELECT id FROM memories WHERE id IN ({placeholders})", deduped
+        ).fetchall()
+    }
+    alive: list[str] = []
+    for candidate_id in deduped:
+        if candidate_id in existing:
+            alive.append(candidate_id)
+        else:
+            storage.write_audit(
+                config,
+                "go_deeper.dropped_dead_reference",
+                draft_id=draft_id,
+                source_id=source_id,
+                dropped_id=candidate_id,
+            )
+
+    if len(alive) > MAX_GO_DEEPER_PER_MEMORY:
+        dropped = alive[MAX_GO_DEEPER_PER_MEMORY:]
+        alive = alive[:MAX_GO_DEEPER_PER_MEMORY]
+        storage.write_audit(
+            config,
+            "go_deeper.capped",
+            memory_id=source_id,
+            kept=len(alive),
+            dropped=len(dropped),
+        )
+
+    return alive
+
+
+def _apply_reciprocity(
+    results: list[tuple[str, Memory]],
+    conn,
+    config: VaultConfig,
+) -> None:
+    """Materialise back-edges: when A → B, ensure B → A too.
+
+    Without this, list_neighbors(B) and use_memories(B) silently lose the
+    A-side context. The viewer recomputed incoming edges in the browser, but
+    the data layer never persisted them — this fixes that.
+    """
+    for _, memory in results:
+        for target_id in list(memory.go_deeper):
+            if target_id == memory.id:
+                continue
+            target = _load(conn, config, target_id)
+            if target is None:
+                continue
+            if memory.id in target.go_deeper:
+                continue
+            if len(target.go_deeper) >= MAX_GO_DEEPER_PER_MEMORY:
+                storage.write_audit(
+                    config,
+                    "go_deeper.reciprocity_capped",
+                    from_id=target_id,
+                    to_id=memory.id,
+                    reason="target_full",
+                )
+                continue
+            target.go_deeper = [*target.go_deeper, memory.id]
+            storage.write_memory(config, target, conn)
+            storage.write_audit(
+                config,
+                "go_deeper.reciprocity_added",
+                from_id=target_id,
+                to_id=memory.id,
+            )
 
 
 def _filter_and_cap_decisions(

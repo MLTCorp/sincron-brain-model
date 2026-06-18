@@ -477,6 +477,93 @@ def search(query: str, limit: int = 20) -> list[dict]:
 
 
 @mcp.tool()
+def list_neighbors(memory_id: str, depth: int = 1, limit: int = 20) -> dict:
+    """Expand the neighbourhood of a memory by following go_deeper edges.
+
+    Use this after `use_memories([id])` to fetch the semantic context the
+    memory points to (and points back from, thanks to reciprocity) in a
+    single MCP call, rather than chaining N read_memory roundtrips.
+
+    Args:
+        memory_id: The seed memory to expand from.
+        depth: BFS depth (default 1, max 3).
+        limit: Max neighbours returned (default 20, max 100).
+
+    Returns:
+        {"memory_id", "depth", "neighbors": [{id, synopsis, major_tags, tags,
+        score, distance}, ...]} sorted by distance asc, then score desc.
+    """
+    depth = max(1, min(depth, 3))
+    limit = max(1, min(limit, 100))
+    config = get_config()
+    with storage.open_db(config) as conn:
+        seed = storage.get_memory(config, conn, memory_id)
+        if seed is None:
+            storage.write_audit(
+                config,
+                "tool.list_neighbors",
+                seed_id=memory_id,
+                depth=depth,
+                limit=limit,
+                result_count=0,
+                seed_missing=True,
+            )
+            return {"memory_id": memory_id, "depth": depth, "neighbors": []}
+
+        visited: dict[str, int] = {memory_id: 0}
+        frontier = [memory_id]
+        for hop in range(1, depth + 1):
+            next_frontier: list[str] = []
+            for node in frontier:
+                row = conn.execute(
+                    "SELECT go_deeper FROM memories WHERE id = ?", (node,)
+                ).fetchone()
+                if row is None:
+                    continue
+                import json as _json
+
+                targets = _json.loads(row["go_deeper"]) or []
+                for target in targets:
+                    if target in visited:
+                        continue
+                    visited[target] = hop
+                    next_frontier.append(target)
+            frontier = next_frontier
+            if not frontier:
+                break
+
+        neighbour_ids = [nid for nid, dist in visited.items() if dist > 0]
+        neighbours: list[dict] = []
+        for nid in neighbour_ids:
+            memory = storage.get_memory(config, conn, nid)
+            if memory is None:
+                continue
+            neighbours.append(
+                {
+                    "id": memory.id,
+                    "synopsis": memory.synopsis,
+                    "major_tags": memory.major_tags,
+                    "tags": memory.tags,
+                    "score": memory.score,
+                    "distance": visited[nid],
+                }
+            )
+
+    neighbours.sort(key=lambda n: (n["distance"], -n["score"]))
+    neighbours = neighbours[:limit]
+
+    storage.write_audit(
+        config,
+        "tool.list_neighbors",
+        seed_id=memory_id,
+        depth=depth,
+        limit=limit,
+        result_count=len(neighbours),
+    )
+    return {"memory_id": memory_id, "depth": depth, "neighbors": neighbours}
+
+
+@mcp.tool()
 def list_memories_by_date(date: str, field: str = "created", limit: int = 100) -> dict:
     """List memories associated with a specific date.
 

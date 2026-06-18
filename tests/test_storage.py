@@ -263,6 +263,43 @@ def test_get_memory_returns_none_for_missing(tmp_path):
         assert storage.get_memory(config, conn, "nope") is None
 
 
+def test_stats_includes_graph_health_metrics(tmp_path):
+    config = make_config(tmp_path)
+    with storage.open_db(config) as conn:
+        a = Memory(
+            id="a", major_tags=["projects"], synopsis="A", go_deeper=["b"]
+        )
+        b = Memory(
+            id="b", major_tags=["projects"], synopsis="B", go_deeper=["a"]
+        )
+        orphan = Memory(id="orphan", major_tags=["projects"], synopsis="lonely")
+        storage.write_memory(config, a, conn)
+        storage.write_memory(config, b, conn)
+        storage.write_memory(config, orphan, conn)
+        result = storage.stats(conn)
+
+    assert result["total"] == 3
+    assert result["linked_memories"] == 2
+    assert result["avg_go_deeper"] > 0
+    assert result["orphan_count"] == 1
+    assert result["dead_links_count"] == 0
+
+
+def test_stats_counts_dead_go_deeper_links(tmp_path):
+    config = make_config(tmp_path)
+    with storage.open_db(config) as conn:
+        broken = Memory(
+            id="broken",
+            major_tags=["projects"],
+            synopsis="broken",
+            go_deeper=["ghost-id"],
+        )
+        storage.write_memory(config, broken, conn)
+        result = storage.stats(conn)
+
+    assert result["dead_links_count"] == 1
+
+
 def test_list_major_tags_returns_canonical_taxonomy_when_empty(tmp_path):
     config = make_config(tmp_path)
     with storage.open_db(config) as conn:

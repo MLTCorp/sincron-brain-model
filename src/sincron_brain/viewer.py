@@ -906,6 +906,10 @@ function init() {{
     ['Reativações', DATA.stats.reactivation_queue],
     ['Score médio', DATA.stats.avg_score],
     ['High-score', DATA.stats.high_score_count],
+    ['Linkadas', DATA.stats.linked_memories ?? 0],
+    ['Média go_deeper', DATA.stats.avg_go_deeper ?? 0],
+    ['Órfãs', DATA.stats.orphan_count ?? 0],
+    ['Links mortos', DATA.stats.dead_links_count ?? 0],
   ].map(([k,v]) => `<div class="stat"><span class="muted">${{esc(k)}}</span><b>${{esc(v)}}</b></div>`).join('');
   const tagFilter = document.getElementById('tagFilter');
   tagFilter.innerHTML = '<option value="">Todas</option>' + DATA.major_tags.map(t => `<option>${{esc(t.major_tag)}}</option>`).join('');

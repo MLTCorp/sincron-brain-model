@@ -390,7 +390,7 @@ def list_tags(
     """List memories under a major_tag, ordered by score DESC."""
     rows = conn.execute(
         """
-        SELECT id, major_tags, tags, score, synopsis, last_accessed, access_count
+        SELECT id, major_tags, tags, score, synopsis, go_deeper, last_accessed, access_count
         FROM memories
         WHERE score >= ?
         ORDER BY score DESC
@@ -409,6 +409,7 @@ def list_tags(
                 "score": r["score"],
                 "tags": json.loads(r["tags"]),
                 "synopsis": r["synopsis"],
+                "go_deeper": json.loads(r["go_deeper"]),
                 "last_accessed": r["last_accessed"],
                 "access_count": r["access_count"],
             }
@@ -432,7 +433,7 @@ def search_fts(
     fts_query = (" " if match_all else " OR ").join(terms)
     rows = conn.execute(
         """
-        SELECT m.id, m.score, m.synopsis, m.major_tags, m.tags,
+        SELECT m.id, m.score, m.synopsis, m.major_tags, m.tags, m.go_deeper,
                bm25(memories_fts) AS rank
         FROM memories_fts
         JOIN memories m ON m.id = memories_fts.id
@@ -449,6 +450,7 @@ def search_fts(
             "synopsis": r["synopsis"],
             "major_tags": json.loads(r["major_tags"]),
             "tags": json.loads(r["tags"]),
+            "go_deeper": json.loads(r["go_deeper"]),
         }
         for r in rows
     ]
@@ -511,6 +513,7 @@ def memory_card(memory: Memory, status: str | None = None) -> dict:
         "tags": memory.tags,
         "score": memory.score,
         "synopsis": memory.synopsis,
+        "go_deeper": memory.go_deeper,
         "created": memory.created.isoformat(),
         "last_accessed": memory.last_accessed.isoformat(),
         "last_scored": memory.last_scored.isoformat(),
@@ -562,7 +565,16 @@ def stats(conn: sqlite3.Connection) -> dict:
     """Vault summary for the stats command and MCP tool."""
     total = conn.execute("SELECT COUNT(*) AS c FROM memories").fetchone()["c"]
     if total == 0:
-        return {"total": 0, "tags": 0, "avg_score": 0.0, "high_score_count": 0}
+        return {
+            "total": 0,
+            "tags": 0,
+            "avg_score": 0.0,
+            "high_score_count": 0,
+            "linked_memories": 0,
+            "avg_go_deeper": 0.0,
+            "orphan_count": 0,
+            "dead_links_count": 0,
+        }
     row = conn.execute(
         """
         SELECT
@@ -573,11 +585,51 @@ def stats(conn: sqlite3.Connection) -> dict:
         """
     ).fetchone()
     tags_count = len(list_major_tags(conn))
+    graph = _graph_health(conn, total)
     return {
         "total": row["total"],
         "tags": tags_count,
         "avg_score": round(row["avg_score"] or 0.0, 1),
         "high_score_count": row["high"],
+        **graph,
+    }
+
+
+def _graph_health(conn: sqlite3.Connection, total: int) -> dict:
+    """Per-vault go_deeper health: density, orphans, broken references."""
+    all_ids: set[str] = set()
+    edges_from: dict[str, list[str]] = {}
+    edges_to: dict[str, list[str]] = {}
+    for row in conn.execute("SELECT id, go_deeper FROM memories").fetchall():
+        memory_id = row["id"]
+        all_ids.add(memory_id)
+        try:
+            targets = json.loads(row["go_deeper"]) or []
+        except (json.JSONDecodeError, TypeError):
+            targets = []
+        edges_from[memory_id] = list(targets)
+        for target in targets:
+            edges_to.setdefault(target, []).append(memory_id)
+
+    linked_memories = sum(1 for ids in edges_from.values() if ids)
+    total_edges = sum(len(ids) for ids in edges_from.values())
+    avg_go_deeper = round(total_edges / total, 2) if total else 0.0
+    orphan_count = sum(
+        1
+        for memory_id in all_ids
+        if not edges_from.get(memory_id) and not edges_to.get(memory_id)
+    )
+    dead_links_count = sum(
+        1
+        for targets in edges_from.values()
+        for target in targets
+        if target not in all_ids
+    )
+    return {
+        "linked_memories": linked_memories,
+        "avg_go_deeper": avg_go_deeper,
+        "orphan_count": orphan_count,
+        "dead_links_count": dead_links_count,
     }
 
 

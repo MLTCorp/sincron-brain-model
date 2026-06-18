@@ -152,6 +152,15 @@ def test_build_messages_includes_major_tag_taxonomy_and_primary_rule():
     assert "singular/plural duplicado" in blob
 
 
+def test_build_messages_includes_go_deeper_integrity_rules():
+    msgs = build_messages(DraftItem(id="d", content="..."), _cands())
+    blob = " ".join(m["content"] for m in msgs)
+    assert "go_deeper SÓ pode citar IDs" in blob
+    assert "Nunca invente IDs" in blob
+    assert "alternativa ao merge cross-major-tag" in blob
+    assert "preenchidos automaticamente pelo sistema" in blob
+
+
 def test_build_messages_forbids_subject_mixing_and_cross_major_merge():
     msgs = build_messages(DraftItem(id="d", content="..."), _cands())
     blob = " ".join(m["content"] for m in msgs)
