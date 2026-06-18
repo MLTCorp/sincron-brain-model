@@ -167,9 +167,9 @@ def _create_vault(
     elif yes:
         chosen_provider = next(iter(PROVIDER_API_KEY_ENV))
         console.print(
-            f"[yellow]No provider API key detected in the environment.[/] "
-            f"Defaulting the judge config to [bold]{chosen_provider}[/]. "
-            f"Override with `--provider <name>` or export the env var for your provider."
+            "[yellow]No provider API key detected in the environment.[/] "
+            "Vault will be created with a placeholder judge config — see the "
+            "Judge section below for how to point it at a real provider."
         )
     else:
         chosen_provider = _prompt_provider()
