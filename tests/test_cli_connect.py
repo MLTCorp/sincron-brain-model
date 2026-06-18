@@ -465,7 +465,7 @@ def test_load_config_applies_dotenv_so_judge_sees_the_key(tmp_path, monkeypatch)
     assert config.judge_api_key_source() == LLM_API_KEY_ENV
 
 
-def test_connect_fallback_message_points_at_vault_dotenv(tmp_path, monkeypatch):
+def test_connect_fallback_message_is_short_and_actionable(tmp_path, monkeypatch):
     project = tmp_path / "project"
     vault = tmp_path / "memory"
     project.mkdir()
@@ -479,10 +479,10 @@ def test_connect_fallback_message_points_at_vault_dotenv(tmp_path, monkeypatch):
     )
 
     assert result.exit_code == 0
-    assert "FALLBACK MODE" in result.output
+    assert "Judge: NOT ACTIVATED" in result.output
+    assert "set_judge_key" in result.output
+    assert "paste your API key in the agent chat" in result.output
     assert str(vault / DOTENV_FILENAME) in result.output
-    assert LLM_API_KEY_ENV in result.output
-    assert "sincron-brain set-judge --auto" in result.output
 
 
 def test_set_judge_rejects_unsupported_provider(tmp_path):

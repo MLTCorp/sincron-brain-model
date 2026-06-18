@@ -140,46 +140,32 @@ def _print_judge_status(config: VaultConfig) -> None:
     if status["ready"]:
         key_label = status.get("api_key_source") or status["api_key_env"]
         console.print(
-            f"[bold]Judge:[/] [green]ready[/] · "
-            f"{status['provider']}/{status['model']} · "
-            f"key {key_label} detected"
+            f"[bold]Judge:[/] [green]READY[/]  "
+            f"{status['provider']} / {status['model']}  "
+            f"[dim](key {key_label})[/]"
         )
-        console.print(
-            "  To switch judge: [bold]sincron-brain set-judge --provider <name>[/] "
-            f"(or set {JUDGE_PROVIDER_OVERRIDE_ENV} before `connect`)."
-        )
-    else:
-        any_other_key = _detect_provider_from_env() is not None
-        console.print(
-            "[bold]Judge:[/] [yellow]FALLBACK MODE[/] · no provider API key detected in this shell."
-        )
-        console.print(
-            "[yellow]  While in fallback, sleep indexes drafts mechanically:[/]"
-        )
-        console.print(
-            "[yellow]    Major Tags collapse to `_uncategorized`, synopses are not "
-            "rewritten, no go_deeper links are proposed.[/]"
-        )
-        dotenv_path = config.vault_path / DOTENV_FILENAME
-        console.print("[yellow]  To enable cognitive indexing, do ONE of:[/]")
-        console.print(
-            f"[yellow]    A) Edit the vault .env (recommended — persists across shells):[/]"
-        )
-        console.print(f"         {dotenv_path}")
-        console.print(
-            f"       Uncomment the {LLM_API_KEY_ENV} line and paste your key. "
-            "The provider is detected from the key prefix "
-            "(sk-ant-* -> Anthropic, sk-* -> OpenAI, AIza* -> Gemini, "
-            f"AKIA*/ASIA* -> Bedrock). For other providers, also uncomment {LLM_PROVIDER_ENV}."
-        )
-        console.print(
-            f"[yellow]    B) Export the env var in the shell that starts the MCP client:[/]"
-        )
-        console.print(f'         $env:{LLM_API_KEY_ENV} = "<your-key>"')
-        console.print(
-            "[yellow]    After either path, run:[/] sincron-brain set-judge --auto  "
-            "[yellow](confirms the provider)[/]"
-        )
+        return
+
+    console.print(
+        "[bold yellow]Judge: NOT ACTIVATED[/]  "
+        "[yellow](drafts will be saved but not classified by the LLM)[/]"
+    )
+    console.print()
+    console.print(
+        "[bold]To activate:[/] paste your API key in the agent chat — "
+        "the agent will call [bold]set_judge_key()[/] to persist it and "
+        "confirm it works in one step."
+    )
+    console.print(
+        "[dim]  Supports Anthropic, OpenAI, Gemini, Mistral, Cohere, Voyage, "
+        "Azure, Bedrock, Ollama, and custom endpoints. The agent detects the "
+        "provider automatically.[/]"
+    )
+    console.print()
+    console.print(
+        f"[dim]Power-user alternative: edit {config.vault_path / DOTENV_FILENAME} "
+        "and ask the agent to run [bold]verify_judge()[/] to confirm.[/]"
+    )
 
 
 def _detect_provider_from_key(key: str) -> str | None:
