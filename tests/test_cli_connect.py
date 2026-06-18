@@ -1,9 +1,17 @@
 import json
+import os
 
 from typer.testing import CliRunner
 
 from sincron_brain.cli import _detect_provider_from_env, _detect_provider_from_key, app
-from sincron_brain.config import LLM_API_KEY_ENV, LLM_PROVIDER_ENV, PROVIDER_API_KEY_ENV
+from sincron_brain.config import (
+    DOTENV_FILENAME,
+    LLM_API_KEY_ENV,
+    LLM_PROVIDER_ENV,
+    PROVIDER_API_KEY_ENV,
+    load_config,
+    load_dotenv,
+)
 
 runner = CliRunner()
 
@@ -379,7 +387,7 @@ def test_judge_api_key_prefers_llm_api_key_over_provider_specific(tmp_path, monk
     assert config.judge_api_key_source() == LLM_API_KEY_ENV
 
 
-def test_connect_fallback_message_lists_all_provider_envs(tmp_path, monkeypatch):
+def test_connect_creates_env_template_and_gitignore(tmp_path, monkeypatch):
     project = tmp_path / "project"
     vault = tmp_path / "memory"
     project.mkdir()
@@ -391,9 +399,89 @@ def test_connect_fallback_message_lists_all_provider_envs(tmp_path, monkeypatch)
     )
 
     assert result.exit_code == 0
+    env_file = vault / DOTENV_FILENAME
+    assert env_file.exists()
+    contents = env_file.read_text(encoding="utf-8")
+    assert "LLM_API_KEY" in contents
+    assert "LLM_PROVIDER" in contents
+    gi = vault / ".gitignore"
+    assert gi.exists()
+    assert ".env" in gi.read_text(encoding="utf-8")
+
+
+def test_connect_does_not_overwrite_existing_env_file(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    vault = tmp_path / "memory"
+    project.mkdir()
+    vault.mkdir()
+    custom_env = "LLM_API_KEY=keep-me\n"
+    (vault / DOTENV_FILENAME).write_text(custom_env, encoding="utf-8")
+
+    runner.invoke(app, ["connect", "--path", str(vault), "--project", str(project)])
+
+    assert (vault / DOTENV_FILENAME).read_text(encoding="utf-8") == custom_env
+
+
+def test_load_dotenv_populates_env_without_clobbering_existing(tmp_path, monkeypatch):
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    (vault / DOTENV_FILENAME).write_text(
+        "# comment line\n"
+        "LLM_API_KEY=from-file\n"
+        "LLM_PROVIDER=mistral\n"
+        '# QUOTED="value"\n'
+        "QUOTED_VAL=\"with spaces\"\n",
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+    monkeypatch.delenv("QUOTED_VAL", raising=False)
+    monkeypatch.setenv("LLM_API_KEY", "from-shell")  # shell-set must win
+
+    loaded = load_dotenv(vault)
+
+    assert os.environ["LLM_API_KEY"] == "from-shell"
+    assert os.environ["LLM_PROVIDER"] == "mistral"
+    assert os.environ["QUOTED_VAL"] == "with spaces"
+    assert "LLM_PROVIDER" in loaded
+    assert "LLM_API_KEY" not in loaded  # shell already set it; .env skipped
+
+
+def test_load_config_applies_dotenv_so_judge_sees_the_key(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    vault = tmp_path / "memory"
+    project.mkdir()
     for env_var in PROVIDER_API_KEY_ENV.values():
-        assert env_var in result.output
+        monkeypatch.delenv(env_var, raising=False)
+    monkeypatch.delenv(LLM_API_KEY_ENV, raising=False)
+    runner.invoke(app, ["connect", "--path", str(vault), "--project", str(project)])
+
+    (vault / DOTENV_FILENAME).write_text(
+        f"{LLM_API_KEY_ENV}=sk-ant-from-env-file\n", encoding="utf-8"
+    )
+
+    config = load_config(vault)
+    assert config.judge_api_key() == "sk-ant-from-env-file"
+    assert config.judge_api_key_source() == LLM_API_KEY_ENV
+
+
+def test_connect_fallback_message_points_at_vault_dotenv(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    vault = tmp_path / "memory"
+    project.mkdir()
+    for env_var in PROVIDER_API_KEY_ENV.values():
+        monkeypatch.delenv(env_var, raising=False)
+    monkeypatch.delenv(LLM_API_KEY_ENV, raising=False)
+    monkeypatch.delenv(LLM_PROVIDER_ENV, raising=False)
+
+    result = runner.invoke(
+        app, ["connect", "--path", str(vault), "--project", str(project)]
+    )
+
+    assert result.exit_code == 0
     assert "FALLBACK MODE" in result.output
+    assert str(vault / DOTENV_FILENAME) in result.output
+    assert LLM_API_KEY_ENV in result.output
     assert "sincron-brain set-judge --auto" in result.output
 
 

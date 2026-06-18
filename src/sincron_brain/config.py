@@ -11,9 +11,42 @@ import tomli_w
 from pydantic import BaseModel, Field
 
 CONFIG_FILENAME = "_config.toml"
+DOTENV_FILENAME = ".env"
 
 LLM_API_KEY_ENV = "LLM_API_KEY"
 LLM_PROVIDER_ENV = "LLM_PROVIDER"
+
+
+def load_dotenv(vault_path: Path) -> dict[str, str]:
+    """Read <vault>/.env into os.environ without clobbering shell-set values.
+
+    Format: KEY=VALUE per line. Lines starting with `#` and blank lines are
+    ignored. Values may be wrapped in single or double quotes — quotes are
+    stripped. Variables already present in os.environ win, so the shell can
+    always override the file.
+    """
+    dotenv_path = vault_path / DOTENV_FILENAME
+    loaded: dict[str, str] = {}
+    if not dotenv_path.exists():
+        return loaded
+    for raw_line in dotenv_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip()
+        value = value.strip()
+        if value.startswith(("'", '"')) and value.endswith(value[0]) and len(value) >= 2:
+            value = value[1:-1]
+        if not key:
+            continue
+        if key in os.environ:
+            continue
+        os.environ[key] = value
+        loaded[key] = value
+    return loaded
 
 
 class JudgeConfig(BaseModel):
@@ -134,12 +167,13 @@ class VaultConfig(BaseModel):
 
 
 def load_config(vault_path: Path) -> VaultConfig:
-    """Load _config.toml from the given vault. Raises if missing."""
+    """Load _config.toml from the given vault, applying <vault>/.env first."""
     config_file = vault_path / CONFIG_FILENAME
     if not config_file.exists():
         raise FileNotFoundError(
             f"Config not found at {config_file}. Run `sincron-brain init` first."
         )
+    load_dotenv(vault_path)
     data = tomllib.loads(config_file.read_text(encoding="utf-8"))
     return VaultConfig(vault_path=vault_path, **data)
 
