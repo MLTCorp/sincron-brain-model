@@ -176,6 +176,14 @@ def test_write_viewer_renders_fallback_judge_card(tmp_path, monkeypatch):
     assert "judge-card" in html
 
 
+def test_write_viewer_shows_snapshot_timestamp_and_static_warning(tmp_path):
+    config = make_config(tmp_path)
+    html = write_viewer(config).read_text(encoding="utf-8")
+    assert "snapshotInfo" in html
+    assert "Snapshot estático" in html
+    assert "F5 não atualiza" in html
+
+
 def test_render_viewer_escapes_script_end_tag():
     html = render_viewer_html(
         {

@@ -807,6 +807,7 @@ def render_viewer_html(data: dict[str, Any]) -> str:
       </div>
     </div>
     <p class="muted" id="vaultPath"></p>
+    <p class="muted" id="snapshotInfo" title="Static snapshot timestamp"></p>
     <p class="notice" id="viewerMode"></p>
     <div id="judgeStatus"></div>
     <div class="stats" id="stats"></div>
@@ -855,6 +856,12 @@ function init() {{
   if (branding.logo_data_uri) logo.src = branding.logo_data_uri;
   else logo.classList.add('hidden');
   document.getElementById('vaultPath').textContent = DATA.vault_path;
+  const snapshotEl = document.getElementById('snapshotInfo');
+  if (DATA.generated_at) {{
+    const ts = new Date(DATA.generated_at);
+    const formatted = isNaN(ts.getTime()) ? DATA.generated_at : ts.toLocaleString();
+    snapshotEl.textContent = `Snapshot estático de ${{formatted}}. F5 não atualiza — rode \`sincron-brain viewer\` ou deixe o agente rodar uma tool de mutação para regenerar.`;
+  }}
   const viewer = DATA.viewer || {{}};
   const viewerMode = document.getElementById('viewerMode');
   const modeBits = [];
