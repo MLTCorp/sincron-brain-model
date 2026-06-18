@@ -204,6 +204,16 @@ def test_system_prompt_documents_feedback_targets_rule():
     assert "emotion_floor" in blob
 
 
+def test_system_prompt_covers_negative_reactions_explicitly():
+    """Anger / cursing aimed at memory recall must weigh the same as praise."""
+    msgs = build_messages(DraftItem(id="d", content="..."), _cands())
+    blob = " ".join(m["content"] for m in msgs)
+    assert "frustração/raiva/xingamento" in blob
+    assert "MESMO peso" in blob
+    assert "esse cliente me frustrou" in blob  # the not-feedback example
+    assert "desabafo geral" in blob
+
+
 def test_build_messages_includes_go_deeper_integrity_rules():
     msgs = build_messages(DraftItem(id="d", content="..."), _cands())
     blob = " ".join(m["content"] for m in msgs)
