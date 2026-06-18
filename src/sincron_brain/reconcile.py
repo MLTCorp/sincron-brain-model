@@ -101,7 +101,11 @@ def reconcile_draft(
 
     if decision.action == "merge" and decision.target_id:
         target = _load(conn, config, decision.target_id)
-        if target is not None and not _too_large(target, config):
+        if (
+            target is not None
+            and not _too_large(target, config)
+            and not _crosses_major_tag(target, decision)
+        ):
             merged = _apply_merge(target, decision, config)
             storage.write_memory(config, merged, conn)
             return "merged", merged
@@ -111,15 +115,29 @@ def reconcile_draft(
     return "created", new
 
 
+def _crosses_major_tag(target: Memory, decision: Decision) -> bool:
+    """Refuse to merge a draft into a memory whose Major Tag differs.
+
+    Merge means "add context to a memory that already has a home". If the
+    judge's primary Major Tag for the new content doesn't match the target's,
+    the new content belongs in a different memory — link via go_deeper, do not
+    fuse. Without this guard, a user-identity memory could swallow an
+    agent-identity draft (or vice versa) and end up multi-routed.
+    """
+    primary = _primary_major_tags(decision.major_tags)
+    if not primary:
+        return False
+    return primary[0] not in target.major_tags
+
+
 def _apply_merge(target: Memory, decision: Decision, config: VaultConfig) -> Memory:
     if decision.synopsis:
         target.synopsis = decision.synopsis
     if decision.content:
         target.content = f"{target.content}\n\n{decision.content}".strip()
     target.go_deeper = sorted(set(target.go_deeper) | set(decision.go_deeper))
-    target.major_tags = sorted(
-        set(target.major_tags) | set(_primary_major_tags(decision.major_tags))
-    )
+    # Merge does NOT change major_tags: the target already has its home.
+    # Cross-major-tag attempts are blocked upstream by _crosses_major_tag.
     target.tags = normalize_tags([*target.tags, *decision.tags])
     now = datetime.now(UTC)
     target.score = config.score.initial

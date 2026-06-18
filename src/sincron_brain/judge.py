@@ -64,7 +64,19 @@ SYSTEM_PROMPT = (
     "- HINT_TAGS do draft (se houver) são sugestões de tags COMUNS feitas pelo host. "
     "Trate-as como candidatas a `tags`, NUNCA como major_tag. Promover um hint a "
     "major_tag (ex: 'name', 'identity') é proibido — esses valores ficam em `tags`, e "
-    "o major_tag certo vem dos defaults canônicos (ex: 'user_profile' para identidade do usuário)."
+    "o major_tag certo vem dos defaults canônicos (ex: 'user_profile' para identidade do usuário).\n"
+    "- SUJEITOS DISTINTOS NÃO COMPARTILHAM MEMÓRIA. Identidade do agente (IA), do "
+    "usuário humano, de clientes/terceiros, e de organizações são MEMÓRIAS SEPARADAS, "
+    "mesmo quando o tema é parecido (nome, papel, função). Ex: 'usuário se chama "
+    "Massari' (user_profile) e 'agente se chama Adamastor' (soul) NUNCA viram a "
+    "mesma memória — são duas memórias distintas, opcionalmente ligadas por go_deeper.\n"
+    "- soul é o agente (a IA). user_profile é o humano que conversa. people é um "
+    "terceiro mencionado. organizations é entidade jurídica. Esses major_tags "
+    "marcam sujeitos diferentes e jamais coexistem numa única memória.\n"
+    "- MERGE preserva a major_tag da candidata. Se você acha que o assunto novo "
+    "pertence a outro major_tag, então NÃO é merge — é create + opcionalmente "
+    "go_deeper apontando para a candidata. Em merge, omita `major_tags` ou "
+    "repita a major_tag da candidata; nunca proponha uma diferente."
 )
 
 

@@ -103,6 +103,16 @@ def test_build_messages_includes_major_tag_taxonomy_and_primary_rule():
     assert "singular/plural duplicado" in blob
 
 
+def test_build_messages_forbids_subject_mixing_and_cross_major_merge():
+    msgs = build_messages(DraftItem(id="d", content="..."), _cands())
+    blob = " ".join(m["content"] for m in msgs)
+    assert "SUJEITOS DISTINTOS NÃO COMPARTILHAM MEMÓRIA" in blob
+    assert "Adamastor" in blob and "Massari" in blob
+    assert "soul é o agente" in blob
+    assert "user_profile é o humano" in blob
+    assert "MERGE preserva a major_tag da candidata" in blob
+
+
 def test_build_messages_for_conversation_turn_instructs_contextual_compilation():
     msgs = build_messages(
         DraftItem(

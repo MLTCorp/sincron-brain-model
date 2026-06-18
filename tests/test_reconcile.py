@@ -193,6 +193,85 @@ def test_reconcile_merge_applies_emotion_trigger(tmp_path):
         assert mem.emotion_floor == 40  # first emotional feedback trigger
 
 
+def test_reconcile_refuses_merge_across_major_tags(tmp_path):
+    """Massari/Adamastor regression.
+
+    A previous run had a user_profile memory (Massari) and a soul draft
+    (Adamastor). The judge proposed merge; the old reconcile honoured it and
+    unioned both major_tags onto one memory, breaking the "one primary route"
+    rule and hiding the agent identity from `list_tags("soul")`.
+    """
+    config = make_config(tmp_path)
+    with storage.open_db(config) as conn:
+        seed(
+            config,
+            conn,
+            id="user-massari",
+            major_tags=["user_profile"],
+            synopsis="Usuário se apresenta como Massari.",
+            content="Massari é o usuário.",
+        )
+        draft = DraftItem(
+            id="d-soul",
+            content="Agente foi batizado como Adamastor.",
+            hint_tags=["adamastor", "persona"],
+        )
+
+        def decide(_draft, _cands):
+            return Decision(
+                action="merge",
+                target_id="user-massari",
+                major_tags=["soul"],
+                synopsis="Massari e Adamastor — duas identidades.",
+                content="Agente é Adamastor.",
+                tags=["adamastor"],
+            )
+
+        outcome, mem = reconcile.reconcile_draft(conn, draft, config, decide)
+
+    assert outcome == "created"
+    assert mem.major_tags == ["soul"]
+    target = storage.read_memory_file(
+        config.vault_path
+        / conn.execute(
+            "SELECT file_path FROM memories WHERE id = ?", ("user-massari",)
+        ).fetchone()["file_path"]
+    )
+    assert target.major_tags == ["user_profile"]
+    assert "Adamastor" not in target.content
+
+
+def test_reconcile_merge_preserves_target_major_tag(tmp_path):
+    """A real same-major-tag merge must not invent extra major tags either."""
+    config = make_config(tmp_path)
+    with storage.open_db(config) as conn:
+        seed(
+            config,
+            conn,
+            id="massari-name",
+            major_tags=["user_profile"],
+            synopsis="Massari é o usuário.",
+            content="Quem é o usuário: Massari.",
+        )
+        draft = DraftItem(id="d", content="Massari prefere respostas curtas.")
+
+        def decide(_draft, _cands):
+            return Decision(
+                action="merge",
+                target_id="massari-name",
+                major_tags=["user_profile"],
+                tags=["preference"],
+                synopsis="Massari, gosta de respostas curtas.",
+                content="Prefere brevidade.",
+            )
+
+        outcome, mem = reconcile.reconcile_draft(conn, draft, config, decide)
+
+    assert outcome == "merged"
+    assert mem.major_tags == ["user_profile"]
+    assert "preference" in mem.tags
+
+
 def test_reconcile_bloat_guard_falls_back_to_create(tmp_path):
     config = make_config(tmp_path)
     big = "x" * (config.sleep.merge_size_threshold_chars + 1)
