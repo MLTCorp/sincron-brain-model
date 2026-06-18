@@ -256,6 +256,70 @@ def test_connect_existing_vault_with_provider_flag_updates_judge(tmp_path):
     assert 'api_key_env = "OLLAMA_API_KEY"' in config_text
 
 
+def test_set_judge_auto_detects_provider_from_env(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    vault = tmp_path / "memory"
+    project.mkdir()
+    for env_var in PROVIDER_API_KEY_ENV.values():
+        monkeypatch.delenv(env_var, raising=False)
+    runner.invoke(app, ["connect", "--path", str(vault), "--project", str(project)])
+
+    monkeypatch.setenv("MISTRAL_API_KEY", "x")
+    result = runner.invoke(
+        app, ["set-judge", "--auto"], env={"SINCRON_BRAIN_VAULT": str(vault)}
+    )
+
+    assert result.exit_code == 0
+    config_text = (vault / "_config.toml").read_text(encoding="utf-8")
+    assert 'provider = "mistral"' in config_text
+
+
+def test_set_judge_auto_fails_when_no_key_in_env(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    vault = tmp_path / "memory"
+    project.mkdir()
+    runner.invoke(app, ["connect", "--path", str(vault), "--project", str(project)])
+
+    for env_var in PROVIDER_API_KEY_ENV.values():
+        monkeypatch.delenv(env_var, raising=False)
+    result = runner.invoke(
+        app, ["set-judge", "--auto"], env={"SINCRON_BRAIN_VAULT": str(vault)}
+    )
+
+    assert result.exit_code != 0
+    assert "No supported provider API key found" in result.output
+
+
+def test_set_judge_requires_auto_or_provider(tmp_path):
+    project = tmp_path / "project"
+    vault = tmp_path / "memory"
+    project.mkdir()
+    runner.invoke(app, ["connect", "--path", str(vault), "--project", str(project)])
+
+    result = runner.invoke(app, ["set-judge"], env={"SINCRON_BRAIN_VAULT": str(vault)})
+
+    assert result.exit_code != 0
+    assert "--auto" in result.output
+
+
+def test_connect_fallback_message_lists_all_provider_envs(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    vault = tmp_path / "memory"
+    project.mkdir()
+    for env_var in PROVIDER_API_KEY_ENV.values():
+        monkeypatch.delenv(env_var, raising=False)
+
+    result = runner.invoke(
+        app, ["connect", "--path", str(vault), "--project", str(project)]
+    )
+
+    assert result.exit_code == 0
+    for env_var in PROVIDER_API_KEY_ENV.values():
+        assert env_var in result.output
+    assert "FALLBACK MODE" in result.output
+    assert "sincron-brain set-judge --auto" in result.output
+
+
 def test_set_judge_rejects_unsupported_provider(tmp_path):
     project = tmp_path / "project"
     vault = tmp_path / "memory"

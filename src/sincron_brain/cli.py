@@ -73,30 +73,36 @@ def _print_judge_status(config: VaultConfig) -> None:
             f"(or set {JUDGE_PROVIDER_OVERRIDE_ENV} before `connect`)."
         )
     else:
+        any_other_key = _detect_provider_from_env() is not None
         console.print(
-            f"[bold]Judge:[/] [yellow]FALLBACK MODE[/] · "
-            f"{status['provider']}/{status['model']} · "
-            f"key {status['api_key_env']} [yellow]NOT set in this shell[/]"
+            "[bold]Judge:[/] [yellow]FALLBACK MODE[/] · no provider API key detected in this shell."
         )
         console.print(
-            "[yellow]  Without the key, sleep will index drafts mechanically:[/]"
+            "[yellow]  While in fallback, sleep indexes drafts mechanically:[/]"
         )
         console.print(
-            "[yellow]  - Major Tags collapse to `_uncategorized`[/]"
+            "[yellow]    Major Tags collapse to `_uncategorized`, synopses are not "
+            "rewritten, no go_deeper links are proposed.[/]"
+        )
+        console.print("[yellow]  To enable cognitive indexing:[/]")
+        console.print(
+            "[yellow]    1. Export ONE provider key in this shell (any of):[/]"
         )
         console.print(
-            "[yellow]  - Synopses are not rewritten[/]"
+            "       "
+            + ", ".join(PROVIDER_API_KEY_ENV.values())
         )
+        if any_other_key:
+            console.print(
+                "[yellow]    2. Run:[/] sincron-brain set-judge --auto  "
+                "[yellow](will pick the provider whose key you set)[/]"
+            )
+        else:
+            console.print(
+                "[yellow]    2. Run:[/] sincron-brain set-judge --auto"
+            )
         console.print(
-            "[yellow]  - No go_deeper links are proposed[/]"
-        )
-        console.print(
-            f"[yellow]  Set it in the shell that starts your MCP client:[/] "
-            f'$env:{status["api_key_env"]} = "<your-key>"'
-        )
-        console.print(
-            f"[yellow]  Or switch to another provider:[/] "
-            f"sincron-brain set-judge --provider <name>  "
+            f"[yellow]    Or pick explicitly:[/] sincron-brain set-judge --provider <name>  "
             f"(supported: {', '.join(PROVIDER_API_KEY_ENV.keys())})"
         )
 
@@ -282,12 +288,12 @@ def connect(
 @app.command("set-judge")
 def set_judge(
     provider: Annotated[
-        str,
+        str | None,
         typer.Option(
             "--provider",
             help=f"Judge provider. Supported: {', '.join(PROVIDER_API_KEY_ENV)}.",
         ),
-    ],
+    ] = None,
     model: Annotated[
         str | None,
         typer.Option(
@@ -295,13 +301,50 @@ def set_judge(
             help="Judge model. Defaults to the canonical model for the chosen provider.",
         ),
     ] = None,
+    auto: Annotated[
+        bool,
+        typer.Option(
+            "--auto",
+            help="Detect the provider from the first supported API key env var that is set.",
+        ),
+    ] = False,
 ) -> None:
     """Update the judge provider/model for an existing vault without recreating it.
 
     Useful when you develop with one LLM (e.g. Claude in the agent) but want
-    the indexing judge to run on another provider (e.g. a cheaper or local one).
-    The vault's config.toml is rewritten; nothing else is touched.
+    the indexing judge to run on another provider (e.g. a cheaper or local one),
+    or when you set the API key only after `connect` ran.
+
+    Use `--auto` to pick whichever supported provider key is already exported
+    in this shell — handy after a fresh install where the key only landed
+    afterwards.
     """
+    if auto and provider:
+        console.print("[red]Use either --auto or --provider, not both.[/]")
+        raise typer.Exit(1)
+    if not auto and not provider:
+        console.print(
+            "[red]Pass --auto (detect from env) or --provider <name>.[/]\n"
+            f"Supported providers: {', '.join(PROVIDER_API_KEY_ENV)}."
+        )
+        raise typer.Exit(1)
+
+    if auto:
+        detected = _detect_provider_from_env()
+        if detected is None:
+            console.print(
+                "[red]No supported provider API key found in the environment.[/]\n"
+                "Export one of: "
+                + ", ".join(PROVIDER_API_KEY_ENV.values())
+                + ", then re-run with --auto."
+            )
+            raise typer.Exit(1)
+        provider = detected
+        console.print(
+            f"[green]Detected[/] {PROVIDER_API_KEY_ENV[detected]} — "
+            f"using [bold]{detected}[/] as the judge provider."
+        )
+
     if provider not in PROVIDER_API_KEY_ENV:
         console.print(
             f"[red]Unsupported provider:[/] {provider}. "
