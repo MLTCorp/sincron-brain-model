@@ -45,6 +45,21 @@ def test_find_candidates_by_fts_content(tmp_path):
     assert "x" in [c.id for c in cands]
 
 
+def _single(decide_fn):
+    """Wrap a legacy single-Decision stub into the new list[Decision] contract."""
+
+    def wrapped(draft, candidates):
+        return [decide_fn(draft, candidates)]
+
+    return wrapped
+
+
+def _only(results):
+    """Assert the reconcile produced exactly one memory and unwrap it."""
+    assert len(results) == 1
+    return results[0]
+
+
 def test_reconcile_create_writes_new_memory(tmp_path):
     config = make_config(tmp_path)
     draft = DraftItem(id="d", content="nova info", hint_tags=["trabalho"])
@@ -53,7 +68,9 @@ def test_reconcile_create_writes_new_memory(tmp_path):
         return Decision(action="create", major_tags=["trabalho"], synopsis="nova")
 
     with storage.open_db(config) as conn:
-        outcome, mem = reconcile.reconcile_draft(conn, draft, config, decide)
+        outcome, mem = _only(
+            reconcile.reconcile_draft(conn, draft, config, _single(decide))
+        )
         assert outcome == "created"
         assert count(conn) == 1
         assert mem.synopsis == "nova"
@@ -69,11 +86,8 @@ def test_reconcile_create_only_skips_candidate_lookup(tmp_path, monkeypatch):
     monkeypatch.setattr(reconcile, "find_candidates", fail_lookup)
 
     with storage.open_db(config) as conn:
-        outcome, mem = reconcile.reconcile_draft(
-            conn,
-            draft,
-            config,
-            reconcile.create_only,
+        outcome, mem = _only(
+            reconcile.reconcile_draft(conn, draft, config, reconcile.create_only)
         )
 
     assert outcome == "created"
@@ -94,7 +108,9 @@ def test_reconcile_uses_one_primary_major_tag_for_new_memory(tmp_path):
         )
 
     with storage.open_db(config) as conn:
-        _, mem = reconcile.reconcile_draft(conn, draft, config, decide)
+        _, mem = _only(
+            reconcile.reconcile_draft(conn, draft, config, _single(decide))
+        )
 
     assert mem.major_tags == ["external_access"]
     assert mem.tags == ["api_key", "env_file"]
@@ -114,11 +130,13 @@ def test_reconcile_never_promotes_hint_tags_to_major_tag(tmp_path):
     )
 
     with storage.open_db(config) as conn:
-        _, mem = reconcile.reconcile_draft(
-            conn,
-            draft,
-            config,
-            lambda *_: Decision(action="create"),
+        _, mem = _only(
+            reconcile.reconcile_draft(
+                conn,
+                draft,
+                config,
+                lambda *_: [Decision(action="create")],
+            )
         )
 
     assert mem.major_tags == ["_uncategorized"]
@@ -131,11 +149,13 @@ def test_reconcile_hint_tags_become_common_tags_when_decision_has_no_tags(tmp_pa
     draft = DraftItem(id="d", content="deploy toda sexta", hint_tags=["schedule", "workflows"])
 
     with storage.open_db(config) as conn:
-        _, mem = reconcile.reconcile_draft(
-            conn,
-            draft,
-            config,
-            lambda *_: Decision(action="create"),
+        _, mem = _only(
+            reconcile.reconcile_draft(
+                conn,
+                draft,
+                config,
+                lambda *_: [Decision(action="create")],
+            )
         )
 
     assert mem.major_tags == ["_uncategorized"]
@@ -150,7 +170,9 @@ def test_reconcile_decision_tags_take_precedence_over_hint_tags(tmp_path):
         return Decision(action="create", major_tags=["soul"], tags=["preferred"])
 
     with storage.open_db(config) as conn:
-        _, mem = reconcile.reconcile_draft(conn, draft, config, decide)
+        _, mem = _only(
+            reconcile.reconcile_draft(conn, draft, config, _single(decide))
+        )
 
     assert mem.major_tags == ["soul"]
     assert mem.tags == ["preferred"]
@@ -171,7 +193,9 @@ def test_reconcile_merge_enriches_without_duplicating(tmp_path):
                 go_deeper=["cacau"],
             )
 
-        outcome, mem = reconcile.reconcile_draft(conn, draft, config, decide)
+        outcome, mem = _only(
+            reconcile.reconcile_draft(conn, draft, config, _single(decide))
+        )
         assert outcome == "merged"
         assert count(conn) == 1  # no duplicate created
         assert "Cofundador." in mem.content and "Cacau" in mem.content  # appended, not replaced
@@ -189,7 +213,9 @@ def test_reconcile_merge_applies_emotion_trigger(tmp_path):
         def decide(_draft, _cands):
             return Decision(action="merge", target_id="a", content="grato", emotional=True)
 
-        _, mem = reconcile.reconcile_draft(conn, draft, config, decide)
+        _, mem = _only(
+            reconcile.reconcile_draft(conn, draft, config, _single(decide))
+        )
         assert mem.emotion_floor == 40  # first emotional feedback trigger
 
 
@@ -227,7 +253,9 @@ def test_reconcile_refuses_merge_across_major_tags(tmp_path):
                 tags=["adamastor"],
             )
 
-        outcome, mem = reconcile.reconcile_draft(conn, draft, config, decide)
+        outcome, mem = _only(
+            reconcile.reconcile_draft(conn, draft, config, _single(decide))
+        )
 
     assert outcome == "created"
     assert mem.major_tags == ["soul"]
@@ -265,7 +293,9 @@ def test_reconcile_merge_preserves_target_major_tag(tmp_path):
                 content="Prefere brevidade.",
             )
 
-        outcome, mem = reconcile.reconcile_draft(conn, draft, config, decide)
+        outcome, mem = _only(
+            reconcile.reconcile_draft(conn, draft, config, _single(decide))
+        )
 
     assert outcome == "merged"
     assert mem.major_tags == ["user_profile"]
@@ -282,9 +312,126 @@ def test_reconcile_bloat_guard_falls_back_to_create(tmp_path):
         def decide(_draft, _cands):
             return Decision(action="merge", target_id="a", content="mais um pedaço")
 
-        outcome, _mem = reconcile.reconcile_draft(conn, draft, config, decide)
+        outcome, _mem = _only(
+            reconcile.reconcile_draft(conn, draft, config, _single(decide))
+        )
         assert outcome == "created"  # too large to merge → new fragment
         assert count(conn) == 2
         row = conn.execute("SELECT file_path FROM memories WHERE id = ?", ("a",)).fetchone()
         target = storage.read_memory_file(config.vault_path / row["file_path"])
         assert target.content == big  # untouched
+
+
+def test_reconcile_decomposes_draft_into_multiple_memories(tmp_path):
+    """Massari/Adamastor introduction: one combined draft → two memories,
+    one per Major Tag. This is the core of the multi-decision pipeline."""
+    config = make_config(tmp_path)
+    draft = DraftItem(
+        id="d-intro",
+        content="Olá, sou Massari, quero que sejas Adamastor sempre bem-humorado.",
+        hint_tags=["nome", "adamastor", "humor"],
+    )
+
+    def decide(_draft, _cands):
+        return [
+            Decision(
+                action="create",
+                major_tags=["user_profile"],
+                tags=["massari"],
+                synopsis="O usuário se apresenta como Massari, humano que conversa com o agente.",
+                content="Nome do usuário: Massari.",
+            ),
+            Decision(
+                action="create",
+                major_tags=["soul"],
+                tags=["adamastor", "persona", "humor"],
+                synopsis="O agente foi batizado Adamastor: persona bem-humorada, tom leve.",
+                content="Identidade do agente: Adamastor, gigante de bom humor.",
+            ),
+        ]
+
+    with storage.open_db(config) as conn:
+        results = reconcile.reconcile_draft(conn, draft, config, decide)
+
+    assert len(results) == 2
+    majors = sorted({mem.major_tags[0] for _, mem in results})
+    assert majors == ["soul", "user_profile"]
+
+
+def test_reconcile_caps_decisions_at_max_per_draft(tmp_path):
+    config = make_config(tmp_path)
+    draft = DraftItem(id="d", content="x")
+
+    def explode(_draft, _cands):
+        return [
+            Decision(
+                action="create",
+                major_tags=[mt],
+                synopsis=f"Sinopse muito longa pra passar do limite mínimo de caracteres: {mt}.",
+                content=f"Conteúdo {mt}",
+            )
+            for mt in ["soul", "user_profile", "preferences", "projects", "people", "schedule"]
+        ]
+
+    with storage.open_db(config) as conn:
+        results = reconcile.reconcile_draft(conn, draft, config, explode)
+
+    assert len(results) == reconcile.MAX_DECISIONS_PER_DRAFT
+    events = [e["event"] for e in storage.read_audit(config)]
+    assert "sleep.decision_capped" in events
+
+
+def test_reconcile_dedups_decisions_with_same_major_tag(tmp_path):
+    config = make_config(tmp_path)
+    draft = DraftItem(id="d", content="x")
+
+    def duplicate(_draft, _cands):
+        return [
+            Decision(
+                action="create",
+                major_tags=["user_profile"],
+                tags=["massari"],
+                synopsis="Sinopse robusta sobre o nome do usuário Massari.",
+                content="Usuário é Massari.",
+            ),
+            Decision(
+                action="create",
+                major_tags=["user_profile"],
+                tags=["massari", "email"],
+                synopsis="Sinopse robusta sobre o email do usuário Massari.",
+                content="Email de Massari.",
+            ),
+        ]
+
+    with storage.open_db(config) as conn:
+        results = reconcile.reconcile_draft(conn, draft, config, duplicate)
+
+    assert len(results) == 1
+    events = [e["event"] for e in storage.read_audit(config)]
+    assert "sleep.decision_deduped" in events
+
+
+def test_reconcile_rejects_thin_decisions_when_decomposing(tmp_path):
+    """When the LLM fragments into many decisions but some are empty/short,
+    drop the thin ones. A single-decision draft is exempt (legacy behaviour)."""
+    config = make_config(tmp_path)
+    draft = DraftItem(id="d", content="x")
+
+    def thin_and_thick(_draft, _cands):
+        return [
+            Decision(
+                action="create",
+                major_tags=["soul"],
+                synopsis="Adamastor é o agente, persona bem-humorada e tom leve.",
+                content="Agente é Adamastor.",
+            ),
+            Decision(action="create", major_tags=["user_profile"], synopsis="curta"),
+        ]
+
+    with storage.open_db(config) as conn:
+        results = reconcile.reconcile_draft(conn, draft, config, thin_and_thick)
+
+    assert len(results) == 1
+    assert results[0][1].major_tags == ["soul"]
+    events = [e["event"] for e in storage.read_audit(config)]
+    assert "sleep.decision_rejected" in events

@@ -29,20 +29,31 @@ def run_sleep(config: VaultConfig, decide: Decider | None = None) -> dict:
 
     with storage.open_db(config) as conn:
         for path, draft in storage.iter_drafts(config):
-            outcome, memory = reconcile.reconcile_draft(conn, draft, config, decide)
-            if outcome == "merged":
-                merged += 1
-            else:
-                created += 1
-            storage.write_audit(
-                config,
-                "sleep.draft_processed",
-                draft_id=draft.id,
-                outcome=outcome,
-                memory_id=memory.id,
-                score=memory.score,
-                emotion_floor=memory.emotion_floor,
-            )
+            results = reconcile.reconcile_draft(conn, draft, config, decide)
+            if len(results) > 1:
+                storage.write_audit(
+                    config,
+                    "sleep.draft_decomposed",
+                    draft_id=draft.id,
+                    total_decisions=len(results),
+                    major_tags=[memory.major_tags for _, memory in results],
+                )
+            for decision_index, (outcome, memory) in enumerate(results):
+                if outcome == "merged":
+                    merged += 1
+                else:
+                    created += 1
+                storage.write_audit(
+                    config,
+                    "sleep.draft_processed",
+                    draft_id=draft.id,
+                    decision_index=decision_index,
+                    decisions_total=len(results),
+                    outcome=outcome,
+                    memory_id=memory.id,
+                    score=memory.score,
+                    emotion_floor=memory.emotion_floor,
+                )
             path.unlink()
 
         _apply_decay(conn, config)

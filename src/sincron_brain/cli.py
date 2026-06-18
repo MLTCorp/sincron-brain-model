@@ -751,6 +751,16 @@ Use the `sincron-brain` MCP server as the project's long-term memory layer.
   conversation turn are available. Use `remember()` for standalone durable facts, user
   preferences, project decisions, corrections, and information the user explicitly asks you
   to remember.
+- When a single user message brings durable facts that belong to DIFFERENT canonical Major
+  Tags, call `remember()` SEPARATELY for each Major Tag rather than packing them all into a
+  single `remember_turn()`. Example: "Hi, I'm Massari, and I want you to be Adamastor,
+  always cheerful" carries `user_profile` (the human's name) AND `soul` (the agent's
+  persona) — queue two drafts, one per Major Tag, each with a focused content and hint_tags.
+  Sleep will also decompose multi-major drafts as a safety net, but splitting at the agent
+  is cheaper, more accurate, and avoids relying on the LLM judge to guess your intent.
+- Multiple facts about the SAME subject stay in ONE `remember()`. "Massari lives in São
+  Paulo and drinks coffee" is one user_profile memory, not two — same subject, same Major
+  Tag, same memory.
 - Do not store secrets, API keys, tokens, passwords, or unrelated transient chatter.
 - Major Tags are primary retrieval routes, not free-form facets. Use one primary Major Tag
   whenever possible. Defaults: {default_major_tag_names_csv()}.

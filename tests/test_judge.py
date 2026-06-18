@@ -16,6 +16,7 @@ from sincron_brain.judge import (
     judge_status,
     make_judge,
     parse_decision,
+    parse_decisions,
 )
 from sincron_brain.models import DraftItem
 from sincron_brain.reconcile import Candidate
@@ -69,6 +70,54 @@ def test_parse_strips_code_fences():
     d = parse_decision(raw, _cands())
     assert d.action == "create"
     assert d.synopsis == "S"
+
+
+def test_parse_decisions_handles_canonical_multi_format():
+    raw = (
+        '{"decisions":['
+        '{"action":"create","major_tags":["user_profile"],"synopsis":"Massari"},'
+        '{"action":"create","major_tags":["soul"],"synopsis":"Adamastor"}'
+        "]}"
+    )
+    ds = parse_decisions(raw, _cands())
+    assert len(ds) == 2
+    assert ds[0].major_tags == ["user_profile"]
+    assert ds[1].major_tags == ["soul"]
+
+
+def test_parse_decisions_wraps_legacy_single_create():
+    raw = '{"action":"create","major_tags":["x"],"synopsis":"S"}'
+    ds = parse_decisions(raw, _cands())
+    assert len(ds) == 1
+    assert ds[0].action == "create"
+    assert ds[0].synopsis == "S"
+
+
+def test_parse_decisions_wraps_legacy_single_merge():
+    raw = '{"action":"merge","target_id":"a","content_append":"x"}'
+    ds = parse_decisions(raw, _cands("a"))
+    assert len(ds) == 1
+    assert ds[0].action == "merge"
+    assert ds[0].target_id == "a"
+
+
+def test_parse_decisions_empty_list_falls_back_to_safe_create():
+    ds = parse_decisions('{"decisions":[]}', _cands())
+    assert len(ds) == 1
+    assert ds[0].action == "create"
+
+
+def test_parse_decisions_malformed_falls_back_to_safe_create():
+    ds = parse_decisions("não é JSON", _cands())
+    assert len(ds) == 1
+    assert ds[0].action == "create"
+
+
+def test_parse_decisions_drops_non_dict_items_in_array():
+    raw = '{"decisions":[{"action":"create","major_tags":["x"]}, "lixo", 42]}'
+    ds = parse_decisions(raw, _cands())
+    assert len(ds) == 1
+    assert ds[0].major_tags == ["x"]
 
 
 def test_build_messages_includes_draft_and_candidates():
@@ -136,19 +185,35 @@ def test_judge_returns_merge_from_injected_llm():
     cfg = VaultConfig(vault_path=Path("/vault"))
     raw = '{"action":"merge","target_id":"a","content_append":"novo","go_deeper":["p"]}'
     decide = make_judge(cfg, complete=lambda _messages: raw)
-    d = decide(DraftItem(id="d", content="..."), _cands("a"))
-    assert d.action == "merge"
-    assert d.target_id == "a"
-    assert d.content == "novo"
+    ds = decide(DraftItem(id="d", content="..."), _cands("a"))
+    assert len(ds) == 1
+    assert ds[0].action == "merge"
+    assert ds[0].target_id == "a"
+    assert ds[0].content == "novo"
 
 
 def test_judge_returns_create_from_injected_llm():
     cfg = VaultConfig(vault_path=Path("/vault"))
     raw = '{"action":"create","major_tags":["t"],"synopsis":"S"}'
     decide = make_judge(cfg, complete=lambda _messages: raw)
-    d = decide(DraftItem(id="d", content="..."), _cands())
-    assert d.action == "create"
-    assert d.synopsis == "S"
+    ds = decide(DraftItem(id="d", content="..."), _cands())
+    assert len(ds) == 1
+    assert ds[0].action == "create"
+    assert ds[0].synopsis == "S"
+
+
+def test_judge_returns_multiple_decisions_from_canonical_format():
+    cfg = VaultConfig(vault_path=Path("/vault"))
+    raw = (
+        '{"decisions":['
+        '{"action":"create","major_tags":["user_profile"],"synopsis":"Massari"},'
+        '{"action":"create","major_tags":["soul"],"synopsis":"Adamastor"}'
+        "]}"
+    )
+    decide = make_judge(cfg, complete=lambda _messages: raw)
+    ds = decide(DraftItem(id="d", content="..."), _cands())
+    assert len(ds) == 2
+    assert {d.major_tags[0] for d in ds} == {"user_profile", "soul"}
 
 
 def test_judge_provider_failure_falls_back_to_safe_create(tmp_path):
@@ -161,10 +226,11 @@ def test_judge_provider_failure_falls_back_to_safe_create(tmp_path):
         raise RuntimeError("provider unavailable")
 
     decide = make_judge(cfg, complete=raise_provider_error)
-    d = decide(DraftItem(id="d", content="..."), _cands("a"))
+    ds = decide(DraftItem(id="d", content="..."), _cands("a"))
 
-    assert d.action == "create"
-    assert d.major_tags == []
+    assert len(ds) == 1
+    assert ds[0].action == "create"
+    assert ds[0].major_tags == []
     events = [e["event"] for e in _storage.read_audit(cfg)]
     assert "judge.completion_failed" in events
 
@@ -185,6 +251,7 @@ def test_judge_records_completion_duration(tmp_path):
     assert "duration_ms" in completion
     assert completion["provider"] == cfg.judge.provider
     assert completion["model"] == cfg.judge.model
+    assert completion["decisions_count"] == 1
 
 
 def test_default_decider_without_api_key_is_create_only():

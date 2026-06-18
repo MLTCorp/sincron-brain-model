@@ -34,7 +34,9 @@ SYSTEM_PROMPT = (
     "Você organiza a memória de longo prazo de um agente, no eixo "
     "Major Tag → Tag → sinopse → conteúdo.\n"
     "Recebe uma NOVA INFORMAÇÃO e uma lista de MEMÓRIAS EXISTENTES CANDIDATAS.\n\n"
-    "Decida UMA ação e responda APENAS com JSON, sem texto fora dele:\n"
+    "Responda APENAS com JSON no formato:\n"
+    '{"decisions":[{...}, {...}]}\n\n'
+    "Cada item em `decisions` é UMA ação. Tipos válidos de item:\n"
     '- Mesmo assunto de uma candidata → {"action":"merge","target_id":"<id>",'
     '"synopsis":"<sinopse enriquecida>","content_append":"<texto novo a anexar>",'
     '"go_deeper":["<ids relacionados>"],"major_tags":["<tags a adicionar>"],'
@@ -45,7 +47,20 @@ SYSTEM_PROMPT = (
     '"synopsis":"<~300-400 chars>","content":"<memória contextual consolidada>",'
     '"go_deeper":["<ids relacionados>"],'
     '"emotional":<bool>}\n\n'
-    "Regras:\n"
+    "Decomposição em múltiplas decisões:\n"
+    "- Se a NOVA INFORMAÇÃO cobre N major_tags canônicas distintas COM FATOS "
+    "DURÁVEIS INDEPENDENTES, retorne N decisões create — uma por categoria. "
+    "Cada decisão tem synopsis e content focados naquele recorte. NUNCA duplique "
+    "texto entre decisões — se você se vê reescrevendo a mesma frase em duas "
+    "categorias, é sinal de que era uma decisão só.\n"
+    "- Exemplo: 'Olá, sou Massari, quero que sejas Adamastor sempre bem-humorado' "
+    "vira DUAS decisões: (a) create user_profile sobre o nome do usuário; "
+    "(b) create soul sobre a persona e tom do agente. Não junte em uma só, e não "
+    "crie uma terceira em preferences repetindo o mesmo tom.\n"
+    "- Múltiplos fatos sobre o MESMO sujeito ficam em UMA decisão só "
+    "('Massari mora em SP e gosta de café' = uma decisão em user_profile).\n"
+    "- Máximo de 4 decisões por draft. Não use a lista para fragmentar artificialmente.\n\n"
+    "Regras gerais:\n"
     f"{major_tag_prompt_guide()}\n"
     f"{tag_policy_prompt_guide()}\n"
     "- Nunca transforme turnos de conversa em transcrição crua por padrão. Recompile "
@@ -84,32 +99,73 @@ SYSTEM_PROMPT = (
 )
 
 
-def parse_decision(raw: str, candidates: list[Candidate]) -> Decision:
-    """Parse the LLM's JSON into a Decision. Any failure yields a safe create."""
+def parse_decisions(raw: str, candidates: list[Candidate]) -> list[Decision]:
+    """Parse the LLM's JSON into a list of Decisions.
+
+    Accepts three input shapes:
+      - canonical multi: {"decisions": [{...}, {...}]}
+      - single legacy:   {"action": "create"|"merge", ...}  (wrapped in a list)
+      - malformed/empty: returns [Decision(action="create")] as a safe fallback,
+        mirroring the historical contract that a bad LLM response never breaks
+        the sleep job.
+    """
     try:
         data = json.loads(_strip_fences(raw))
-        if data.get("action") == "merge" and data.get("target_id") in {c.id for c in candidates}:
-            return Decision(
-                action="merge",
-                target_id=data["target_id"],
-                synopsis=data.get("synopsis") or "",
-                content=data.get("content_append") or data.get("content") or "",
-                go_deeper=list(data.get("go_deeper") or []),
-                major_tags=list(data.get("major_tags") or []),
-                tags=list(data.get("tags") or []),
-                emotional=bool(data.get("emotional", False)),
-            )
-        return Decision(
-            action="create",
-            major_tags=list(data.get("major_tags") or []),
-            tags=list(data.get("tags") or []),
-            synopsis=data.get("synopsis") or "",
-            content=data.get("content") or "",
-            go_deeper=list(data.get("go_deeper") or []),
-            emotional=bool(data.get("emotional", False)),
-        )
     except (json.JSONDecodeError, TypeError, AttributeError):
-        return Decision(action="create")
+        return [Decision(action="create")]
+
+    if isinstance(data, dict) and isinstance(data.get("decisions"), list):
+        items = data["decisions"]
+    elif isinstance(data, dict) and "action" in data:
+        items = [data]
+    elif isinstance(data, list):
+        items = data
+    else:
+        return [Decision(action="create")]
+
+    candidate_ids = {c.id for c in candidates}
+    decisions: list[Decision] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        if item.get("action") == "merge" and item.get("target_id") in candidate_ids:
+            decisions.append(
+                Decision(
+                    action="merge",
+                    target_id=item["target_id"],
+                    synopsis=item.get("synopsis") or "",
+                    content=item.get("content_append") or item.get("content") or "",
+                    go_deeper=list(item.get("go_deeper") or []),
+                    major_tags=list(item.get("major_tags") or []),
+                    tags=list(item.get("tags") or []),
+                    emotional=bool(item.get("emotional", False)),
+                )
+            )
+        else:
+            decisions.append(
+                Decision(
+                    action="create",
+                    major_tags=list(item.get("major_tags") or []),
+                    tags=list(item.get("tags") or []),
+                    synopsis=item.get("synopsis") or "",
+                    content=item.get("content") or "",
+                    go_deeper=list(item.get("go_deeper") or []),
+                    emotional=bool(item.get("emotional", False)),
+                )
+            )
+
+    if not decisions:
+        return [Decision(action="create")]
+    return decisions
+
+
+def parse_decision(raw: str, candidates: list[Candidate]) -> Decision:
+    """Back-compat single-decision parse — returns the first decision only.
+
+    New code paths should use parse_decisions. Kept so existing test fixtures
+    and any external integration that imported this name keep working.
+    """
+    return parse_decisions(raw, candidates)[0]
 
 
 def build_messages(draft: DraftItem, candidates: list[Candidate]) -> list[dict]:
@@ -155,7 +211,7 @@ def make_judge(config: VaultConfig, complete: Completion | None = None) -> Decid
     """Build the judge Decider. `complete` is injectable for testing."""
     do_complete = complete or _litellm_completion(config)
 
-    def decide(draft: DraftItem, candidates: list[Candidate]) -> Decision:
+    def decide(draft: DraftItem, candidates: list[Candidate]) -> list[Decision]:
         start = time.monotonic()
         try:
             raw = do_complete(build_messages(draft, candidates))
@@ -172,8 +228,9 @@ def make_judge(config: VaultConfig, complete: Completion | None = None) -> Decid
                 model=config.judge.model,
                 candidates=len(candidates),
             )
-            return Decision(action="create")
+            return [Decision(action="create")]
         duration_ms = int((time.monotonic() - start) * 1000)
+        decisions = parse_decisions(raw, candidates)
         storage.write_audit(
             config,
             "judge.completion",
@@ -182,8 +239,9 @@ def make_judge(config: VaultConfig, complete: Completion | None = None) -> Decid
             provider=config.judge.provider,
             model=config.judge.model,
             candidates=len(candidates),
+            decisions_count=len(decisions),
         )
-        return parse_decision(raw, candidates)
+        return decisions
 
     return decide
 

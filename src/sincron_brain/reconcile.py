@@ -47,12 +47,15 @@ class Decision:
     emotional: bool = False
 
 
-Decider = Callable[[DraftItem, list[Candidate]], Decision]
+Decider = Callable[[DraftItem, list[Candidate]], list[Decision]]
+
+MAX_DECISIONS_PER_DRAFT = 4
+MIN_SYNOPSIS_CHARS = 40
 
 
-def create_only(draft: DraftItem, candidates: list[Candidate]) -> Decision:
+def create_only(draft: DraftItem, candidates: list[Candidate]) -> list[Decision]:
     """Default decider: index every draft as a new memory (no dedup, no LLM)."""
-    return Decision(action="create")
+    return [Decision(action="create")]
 
 
 def find_candidates(
@@ -94,25 +97,121 @@ def find_candidates(
 
 def reconcile_draft(
     conn, draft: DraftItem, config: VaultConfig, decide: Decider
-) -> tuple[str, Memory]:
-    """Process one draft. Returns (outcome, memory) where outcome is created|merged."""
+) -> list[tuple[str, Memory]]:
+    """Process one draft into ONE OR MORE memories.
+
+    The judge may return several decisions when a single draft carries facts
+    that belong to different canonical Major Tags (e.g. user identity + agent
+    persona in the same message). Each decision becomes its own memory; the
+    same merge/cross-major-tag guards apply per decision. Returns a list of
+    (outcome, memory) tuples so the sleep job can audit each individually.
+    """
     candidates = [] if decide is create_only else find_candidates(conn, draft, config)
-    decision = decide(draft, candidates)
+    raw_decisions = decide(draft, candidates) or []
+    decisions = _filter_and_cap_decisions(draft, raw_decisions, config)
 
-    if decision.action == "merge" and decision.target_id:
-        target = _load(conn, config, decision.target_id)
+    results: list[tuple[str, Memory]] = []
+    for decision in decisions:
+        if decision.action == "merge" and decision.target_id:
+            target = _load(conn, config, decision.target_id)
+            if (
+                target is not None
+                and not _too_large(target, config)
+                and not _crosses_major_tag(target, decision)
+            ):
+                merged = _apply_merge(target, decision, config)
+                storage.write_memory(config, merged, conn)
+                results.append(("merged", merged))
+                continue
+
+        new = _build_new(draft, decision, config)
+        storage.write_memory(config, new, conn)
+        results.append(("created", new))
+
+    return results
+
+
+def _filter_and_cap_decisions(
+    draft: DraftItem, decisions: list[Decision], config: VaultConfig
+) -> list[Decision]:
+    """Apply the anti-inflation guards before any memory write.
+
+    Three barriers:
+      - cap at MAX_DECISIONS_PER_DRAFT (excess decisions audited and dropped)
+      - dedup by primary major_tag (merge tags + go_deeper, keep the first)
+      - reject thin decisions whose synopsis is shorter than MIN_SYNOPSIS_CHARS
+        and have no content — defense against the LLM rephrasing the same fact
+        across multiple categories to "fake" a decomposition.
+
+    A draft with no surviving decisions falls back to a single create so the
+    content is not lost.
+    """
+    if not decisions:
+        return [Decision(action="create")]
+
+    if len(decisions) > MAX_DECISIONS_PER_DRAFT:
+        storage.write_audit(
+            config,
+            "sleep.decision_capped",
+            draft_id=draft.id,
+            received=len(decisions),
+            kept=MAX_DECISIONS_PER_DRAFT,
+        )
+        decisions = decisions[:MAX_DECISIONS_PER_DRAFT]
+
+    by_major: dict[str, Decision] = {}
+    extras: list[Decision] = []
+    for decision in decisions:
+        primary = _primary_major_tags(decision.major_tags)
+        key = primary[0] if primary else ""
+        if not key:
+            extras.append(decision)
+            continue
+        existing = by_major.get(key)
+        if existing is None:
+            by_major[key] = decision
+        else:
+            existing.tags = list(dict.fromkeys([*existing.tags, *decision.tags]))
+            existing.go_deeper = sorted(
+                set(existing.go_deeper) | set(decision.go_deeper)
+            )
+            existing.emotional = existing.emotional or decision.emotional
+            storage.write_audit(
+                config,
+                "sleep.decision_deduped",
+                draft_id=draft.id,
+                major_tag=key,
+            )
+
+    merged_decisions = [*by_major.values(), *extras]
+
+    # The thin-decision guard only triggers when the LLM actually fragmented.
+    # A single-decision draft is always kept, even with an empty synopsis —
+    # legacy stubs and the no-LLM fallback rely on that.
+    if len(merged_decisions) <= 1:
+        return merged_decisions
+
+    surviving: list[Decision] = []
+    for decision in merged_decisions:
+        synopsis_len = len(decision.synopsis.strip())
         if (
-            target is not None
-            and not _too_large(target, config)
-            and not _crosses_major_tag(target, decision)
+            decision.action == "create"
+            and synopsis_len < MIN_SYNOPSIS_CHARS
+            and not decision.content.strip()
         ):
-            merged = _apply_merge(target, decision, config)
-            storage.write_memory(config, merged, conn)
-            return "merged", merged
+            storage.write_audit(
+                config,
+                "sleep.decision_rejected",
+                draft_id=draft.id,
+                reason="thin_synopsis",
+                synopsis_len=synopsis_len,
+            )
+            continue
+        surviving.append(decision)
 
-    new = _build_new(draft, decision, config)
-    storage.write_memory(config, new, conn)
-    return "created", new
+    if not surviving:
+        return [Decision(action="create")]
+    return surviving
 
 
 def _crosses_major_tag(target: Memory, decision: Decision) -> bool:

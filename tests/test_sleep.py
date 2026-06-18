@@ -71,8 +71,10 @@ def test_run_sleep_merges_with_injected_decider(tmp_path):
 
     def merge_first(_draft, candidates):
         if candidates:
-            return Decision(action="merge", target_id=candidates[0].id, content="Pai do Pedro.")
-        return Decision(action="create")
+            return [
+                Decision(action="merge", target_id=candidates[0].id, content="Pai do Pedro.")
+            ]
+        return [Decision(action="create")]
 
     result = sleep.run_sleep(config, decide=merge_first)
 
@@ -131,12 +133,14 @@ def test_sleep_simulates_days_emotion_floor_and_reactivation(tmp_path):
     )
 
     def emotional_create(_draft, _candidates):
-        return Decision(
-            action="create",
-            major_tags=["projeto"],
-            synopsis="API key fica no arquivo .env.",
-            emotional=True,
-        )
+        return [
+            Decision(
+                action="create",
+                major_tags=["projeto"],
+                synopsis="API key fica no arquivo .env.",
+                emotional=True,
+            )
+        ]
 
     sleep.run_sleep(config, decide=emotional_create)
 
@@ -189,6 +193,63 @@ def test_sleep_simulates_days_emotion_floor_and_reactivation(tmp_path):
     assert later["access_count"] == 1
 
 
+def test_sleep_decomposes_multi_major_draft_into_separate_memories(tmp_path):
+    """One draft → two memories, one per Major Tag. Audit shows decomposition."""
+    config = make_config(tmp_path)
+    storage.write_draft(
+        config,
+        DraftItem(
+            id="d-intro",
+            content="Olá, sou Massari, quero que sejas Adamastor sempre bem-humorado.",
+            hint_tags=["nome", "adamastor", "humor"],
+        ),
+    )
+
+    def split(_draft, _candidates):
+        return [
+            Decision(
+                action="create",
+                major_tags=["user_profile"],
+                tags=["massari"],
+                synopsis="Usuário se apresenta como Massari, identidade durável do humano.",
+                content="Nome do usuário: Massari.",
+            ),
+            Decision(
+                action="create",
+                major_tags=["soul"],
+                tags=["adamastor", "persona", "humor"],
+                synopsis="Agente foi batizado Adamastor, persona bem-humorada, tom leve.",
+                content="Identidade do agente: Adamastor, gigante de bom humor.",
+            ),
+        ]
+
+    result = sleep.run_sleep(config, decide=split)
+
+    assert result["created"] == 2
+    assert result["merged"] == 0
+    assert result["processed"] == 2
+
+    events = storage.read_audit(config)
+    event_names = [e["event"] for e in events]
+    assert "sleep.draft_decomposed" in event_names
+    decomposed = next(e for e in events if e["event"] == "sleep.draft_decomposed")
+    assert decomposed["total_decisions"] == 2
+    assert decomposed["draft_id"] == "d-intro"
+
+    processed_events = [e for e in events if e["event"] == "sleep.draft_processed"]
+    assert len(processed_events) == 2
+    assert {e["decision_index"] for e in processed_events} == {0, 1}
+
+    import json as _json
+
+    with storage.open_db(config) as conn:
+        majors = {
+            _json.loads(row[0])[0]
+            for row in conn.execute("SELECT major_tags FROM memories")
+        }
+    assert majors == {"user_profile", "soul"}
+
+
 def test_sleep_uses_compiled_context_for_conversation_turn(tmp_path):
     config = make_config(tmp_path)
     storage.write_draft(
@@ -205,17 +266,19 @@ def test_sleep_uses_compiled_context_for_conversation_turn(tmp_path):
     )
 
     def compiled_create(_draft, _candidates):
-        return Decision(
-            action="create",
-            major_tags=["projeto"],
-            synopsis="Usuário já corrigiu a IA sobre a API key no .env.",
-            content=(
-                "O usuário já corrigiu a IA por perguntar repetidamente onde fica a API key. "
-                "Neste projeto, considerar que a API key fica no arquivo .env e evitar "
-                "perguntar novamente."
-            ),
-            emotional=True,
-        )
+        return [
+            Decision(
+                action="create",
+                major_tags=["projeto"],
+                synopsis="Usuário já corrigiu a IA sobre a API key no .env.",
+                content=(
+                    "O usuário já corrigiu a IA por perguntar repetidamente onde fica a API key. "
+                    "Neste projeto, considerar que a API key fica no arquivo .env e evitar "
+                    "perguntar novamente."
+                ),
+                emotional=True,
+            )
+        ]
 
     sleep.run_sleep(config, decide=compiled_create)
 

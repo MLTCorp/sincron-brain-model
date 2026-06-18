@@ -21,13 +21,15 @@ def make_config(tmp_path) -> VaultConfig:
     return config
 
 
-def _stub_judge_for(major_tag: str, synopsis: str) -> Callable[..., Decision]:
+def _stub_judge_for(major_tag: str, synopsis: str) -> Callable[..., list[Decision]]:
     def decide(_draft, _candidates):
-        return Decision(
-            action="create",
-            major_tags=[major_tag],
-            synopsis=synopsis,
-        )
+        return [
+            Decision(
+                action="create",
+                major_tags=[major_tag],
+                synopsis=synopsis,
+            )
+        ]
     return decide
 
 
