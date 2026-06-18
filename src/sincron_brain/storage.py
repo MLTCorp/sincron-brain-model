@@ -93,6 +93,61 @@ def _prune_audit_if_due(config: VaultConfig) -> None:
     _AUDIT_LAST_PRUNED[audit_file] = now
 
 
+def recent_use_memories_targets(
+    config: VaultConfig, conn: sqlite3.Connection, window_n: int = 5
+) -> list[dict]:
+    """Return memories cited by the last `window_n` `tool.use_memories` audit events.
+
+    Used by the judge prompt to ground feedback_targets: when the user reacts
+    to the agent's previous use of memory ("you remembered well", "I already
+    told you"), the judge needs to know which memories were just used so it
+    can route the emotional reinforcement to the right place.
+    """
+    if window_n <= 0:
+        return []
+    events = [
+        event
+        for event in read_audit(config)
+        if event.get("event") == "tool.use_memories" and event.get("found_ids")
+    ]
+    if not events:
+        return []
+    recent = events[-window_n:]
+    seen: dict[str, str] = {}
+    for event in recent:
+        ts = event.get("ts", "")
+        for memory_id in event.get("found_ids") or []:
+            if not isinstance(memory_id, str):
+                continue
+            seen[memory_id] = ts  # later events overwrite — last-used ts wins
+
+    if not seen:
+        return []
+
+    placeholders = ",".join(["?"] * len(seen))
+    rows = conn.execute(
+        f"SELECT id, major_tags, synopsis FROM memories WHERE id IN ({placeholders})",
+        list(seen),
+    ).fetchall()
+    by_id = {row["id"]: row for row in rows}
+
+    out: list[dict] = []
+    for memory_id, ts in seen.items():
+        row = by_id.get(memory_id)
+        if row is None:
+            continue
+        out.append(
+            {
+                "id": memory_id,
+                "major_tags": json.loads(row["major_tags"]),
+                "synopsis": row["synopsis"],
+                "last_used_ts": ts,
+            }
+        )
+    out.sort(key=lambda m: m["last_used_ts"], reverse=True)
+    return out
+
+
 def read_audit(config: VaultConfig) -> list[dict]:
     """Read audit events for diagnostics and tests."""
     if not config.audit_file.exists():

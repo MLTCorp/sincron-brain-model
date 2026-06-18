@@ -263,6 +263,43 @@ def test_get_memory_returns_none_for_missing(tmp_path):
         assert storage.get_memory(config, conn, "nope") is None
 
 
+def test_recent_use_memories_targets_returns_recent_ids_enriched(tmp_path):
+    config = make_config(tmp_path)
+    with storage.open_db(config) as conn:
+        storage.write_memory(
+            config,
+            Memory(id="m-old", major_tags=["preferences"], synopsis="Memória antiga"),
+            conn,
+        )
+        storage.write_memory(
+            config,
+            Memory(id="m-new", major_tags=["soul"], synopsis="Memória recente"),
+            conn,
+        )
+
+    storage.write_audit(
+        config, "tool.use_memories", found_ids=["m-old"], reason="primeira"
+    )
+    storage.write_audit(
+        config, "tool.use_memories", found_ids=["m-new"], reason="segunda"
+    )
+
+    with storage.open_db(config) as conn:
+        recent = storage.recent_use_memories_targets(config, conn)
+
+    ids = [r["id"] for r in recent]
+    assert "m-new" in ids
+    assert "m-old" in ids
+    assert recent[0]["id"] == "m-new"  # most recent first
+
+
+def test_recent_use_memories_targets_returns_empty_without_events(tmp_path):
+    config = make_config(tmp_path)
+    with storage.open_db(config) as conn:
+        result = storage.recent_use_memories_targets(config, conn)
+    assert result == []
+
+
 def test_stats_includes_graph_health_metrics(tmp_path):
     config = make_config(tmp_path)
     with storage.open_db(config) as conn:

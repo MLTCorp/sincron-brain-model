@@ -152,6 +152,58 @@ def test_build_messages_includes_major_tag_taxonomy_and_primary_rule():
     assert "singular/plural duplicado" in blob
 
 
+def test_parse_decisions_extracts_feedback_targets_and_sentiment():
+    raw = (
+        '{"decisions":[{"action":"create","major_tags":["preferences"],'
+        '"synopsis":"Feedback positivo do usuário","content":"...",'
+        '"emotional":true,"feedback_targets":["mem-1","mem-2"],'
+        '"feedback_sentiment":"positive"}]}'
+    )
+    ds = parse_decisions(raw, _cands())
+    assert len(ds) == 1
+    assert ds[0].feedback_targets == ["mem-1", "mem-2"]
+    assert ds[0].feedback_sentiment == "positive"
+    assert ds[0].emotional is True
+
+
+def test_parse_decisions_ignores_invalid_feedback_sentiment():
+    raw = (
+        '{"decisions":[{"action":"create","major_tags":["x"],'
+        '"feedback_sentiment":"bogus"}]}'
+    )
+    ds = parse_decisions(raw, _cands())
+    assert ds[0].feedback_sentiment == ""
+
+
+def test_build_messages_includes_recent_use_memories_section():
+    msgs = build_messages(
+        DraftItem(id="d", content="..."),
+        _cands(),
+        recent_use_memories=[
+            {"id": "mem-seneca", "major_tags": ["preferences"], "synopsis": "Lê Sêneca"}
+        ],
+    )
+    blob = " ".join(m["content"] for m in msgs)
+    assert "MEMÓRIAS USADAS RECENTEMENTE" in blob
+    assert "mem-seneca" in blob
+    assert "Lê Sêneca" in blob
+
+
+def test_build_messages_handles_empty_recent_use_memories():
+    msgs = build_messages(DraftItem(id="d", content="..."), _cands())
+    blob = " ".join(m["content"] for m in msgs)
+    assert "MEMÓRIAS USADAS RECENTEMENTE" in blob
+    assert "(nenhuma)" in blob
+
+
+def test_system_prompt_documents_feedback_targets_rule():
+    msgs = build_messages(DraftItem(id="d", content="..."), _cands())
+    blob = " ".join(m["content"] for m in msgs)
+    assert "FEEDBACK DIRECIONADO" in blob
+    assert "feedback_targets" in blob
+    assert "emotion_floor" in blob
+
+
 def test_build_messages_includes_go_deeper_integrity_rules():
     msgs = build_messages(DraftItem(id="d", content="..."), _cands())
     blob = " ".join(m["content"] for m in msgs)

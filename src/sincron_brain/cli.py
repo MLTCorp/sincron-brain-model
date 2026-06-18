@@ -765,6 +765,13 @@ Use the `sincron-brain` MCP server as the project's long-term memory layer.
 - Multiple facts about the SAME subject stay in ONE `remember()`. "Massari lives in São
   Paulo and drinks coffee" is one user_profile memory, not two — same subject, same Major
   Tag, same memory.
+- When the user explicitly reacts to the agent's USE of memory — praise ("you remembered
+  well!", "great catch"), correction ("I already told you that"), reminder ("how come you
+  forgot?"), or appreciation for a pertinent recall — queue a draft via `remember_turn()`
+  with `memory_reason` stating it is feedback about memory performance. The sleep judge
+  reads the recently used memories from the audit log and routes the emotional reinforcement
+  back to the original memories that earned the reaction, raising their `emotion_floor` so
+  the lesson is durable. Without this draft, the feedback is silently lost.
 - Do not store secrets, API keys, tokens, passwords, or unrelated transient chatter.
 - Major Tags are primary retrieval routes, not free-form facets. Use one primary Major Tag
   whenever possible. Defaults: {default_major_tag_names_csv()}.

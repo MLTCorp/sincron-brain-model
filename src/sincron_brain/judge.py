@@ -107,7 +107,16 @@ SYSTEM_PROMPT = (
     "associações fracas.\n"
     "- Cap sugerido: até 3 IDs por go_deeper. Vizinhos semânticos restantes "
     "são preenchidos automaticamente pelo sistema (auto-FTS), então prefira "
-    "poucos links de alta relevância a muitos links fracos."
+    "poucos links de alta relevância a muitos links fracos.\n"
+    "- FEEDBACK DIRECIONADO: quando o draft é reação do usuário ao USO da "
+    "memória (elogio como 'lembrou direitinho', correção como 'já te falei "
+    "isso', cobrança como 'como não lembrou?'), além de marcar `emotional`: "
+    "true, identifique quais memórias receberam o feedback usando a lista "
+    "MEMÓRIAS USADAS RECENTEMENTE fornecida no prompt e liste os IDs em "
+    "`feedback_targets` (cap 3). Indique também `feedback_sentiment` "
+    "(`positive`, `negative` ou `neutral`). Os IDs em feedback_targets ganham "
+    "boost durável de emotion_floor. Se nenhuma memória recente é alvo claro "
+    "do feedback, deixe `feedback_targets` vazio."
 )
 
 
@@ -140,6 +149,14 @@ def parse_decisions(raw: str, candidates: list[Candidate]) -> list[Decision]:
     for item in items:
         if not isinstance(item, dict):
             continue
+        feedback_targets = [
+            tid
+            for tid in (item.get("feedback_targets") or [])
+            if isinstance(tid, str) and tid.strip()
+        ]
+        feedback_sentiment = item.get("feedback_sentiment") or ""
+        if feedback_sentiment not in {"positive", "negative", "neutral", ""}:
+            feedback_sentiment = ""
         if item.get("action") == "merge" and item.get("target_id") in candidate_ids:
             decisions.append(
                 Decision(
@@ -151,6 +168,8 @@ def parse_decisions(raw: str, candidates: list[Candidate]) -> list[Decision]:
                     major_tags=list(item.get("major_tags") or []),
                     tags=list(item.get("tags") or []),
                     emotional=bool(item.get("emotional", False)),
+                    feedback_targets=feedback_targets,
+                    feedback_sentiment=feedback_sentiment,
                 )
             )
         else:
@@ -163,6 +182,8 @@ def parse_decisions(raw: str, candidates: list[Candidate]) -> list[Decision]:
                     content=item.get("content") or "",
                     go_deeper=list(item.get("go_deeper") or []),
                     emotional=bool(item.get("emotional", False)),
+                    feedback_targets=feedback_targets,
+                    feedback_sentiment=feedback_sentiment,
                 )
             )
 
@@ -180,7 +201,11 @@ def parse_decision(raw: str, candidates: list[Candidate]) -> Decision:
     return parse_decisions(raw, candidates)[0]
 
 
-def build_messages(draft: DraftItem, candidates: list[Candidate]) -> list[dict]:
+def build_messages(
+    draft: DraftItem,
+    candidates: list[Candidate],
+    recent_use_memories: list[dict] | None = None,
+) -> list[dict]:
     cand_lines = "\n".join(
         (
             f"- id={c.id}; major_tags={c.major_tags or []}; "
@@ -192,6 +217,14 @@ def build_messages(draft: DraftItem, candidates: list[Candidate]) -> list[dict]:
         f"HINT_TAGS (candidatas a `tags` comuns, nunca a major_tag): {list(draft.hint_tags)}\n\n"
         if draft.hint_tags
         else ""
+    )
+    recent_lines = "\n".join(
+        f"- id={m['id']}; major_tags={m.get('major_tags') or []}: {m.get('synopsis', '')}"
+        for m in (recent_use_memories or [])
+    ) or "(nenhuma)"
+    recent_section = (
+        "MEMÓRIAS USADAS RECENTEMENTE (alvos potenciais de feedback_targets):\n"
+        f"{recent_lines}\n\n"
     )
     if draft.source_type == "conversation_turn" and (
         draft.user_message or draft.agent_response or draft.memory_reason
@@ -205,12 +238,14 @@ def build_messages(draft: DraftItem, candidates: list[Candidate]) -> list[dict]:
             f"{draft.agent_response or '(vazia)'}\n\n"
             f"FALLBACK CONTEXTUAL JÁ COMPILADO:\n{draft.content}\n\n"
             f"{hint_line}"
+            f"{recent_section}"
             f"MEMÓRIAS EXISTENTES CANDIDATAS:\n{cand_lines}"
         )
     else:
         user = (
             f"NOVA INFORMAÇÃO (source={draft.source_type}):\n{draft.content}\n\n"
             f"{hint_line}"
+            f"{recent_section}"
             f"MEMÓRIAS EXISTENTES CANDIDATAS:\n{cand_lines}"
         )
     return [
@@ -223,10 +258,17 @@ def make_judge(config: VaultConfig, complete: Completion | None = None) -> Decid
     """Build the judge Decider. `complete` is injectable for testing."""
     do_complete = complete or _litellm_completion(config)
 
-    def decide(draft: DraftItem, candidates: list[Candidate]) -> list[Decision]:
+    def decide(
+        draft: DraftItem,
+        candidates: list[Candidate],
+        *,
+        recent_use_memories: list[dict] | None = None,
+    ) -> list[Decision]:
         start = time.monotonic()
         try:
-            raw = do_complete(build_messages(draft, candidates))
+            raw = do_complete(
+                build_messages(draft, candidates, recent_use_memories=recent_use_memories)
+            )
         except Exception as exc:
             duration_ms = int((time.monotonic() - start) * 1000)
             storage.write_audit(

@@ -45,6 +45,8 @@ class Decision:
     content: str = ""
     go_deeper: list[str] = field(default_factory=list)
     emotional: bool = False
+    feedback_targets: list[str] = field(default_factory=list)
+    feedback_sentiment: Literal["positive", "negative", "neutral", ""] = ""
 
 
 Decider = Callable[[DraftItem, list[Candidate]], list[Decision]]
@@ -53,6 +55,7 @@ MAX_DECISIONS_PER_DRAFT = 4
 MIN_SYNOPSIS_CHARS = 40
 MAX_GO_DEEPER_PER_MEMORY = 6
 AUTO_FTS_GO_DEEPER_LIMIT = 3
+MAX_FEEDBACK_TARGETS_PER_DECISION = 3
 
 
 def create_only(draft: DraftItem, candidates: list[Candidate]) -> list[Decision]:
@@ -116,7 +119,16 @@ def reconcile_draft(
       - reciprocity is materialised (B.go_deeper gains A when A links B)
     """
     candidates = [] if decide is create_only else find_candidates(conn, draft, config)
-    raw_decisions = decide(draft, candidates) or []
+    recent_use_memories = (
+        [] if decide is create_only else storage.recent_use_memories_targets(config, conn)
+    )
+    try:
+        raw_decisions = (
+            decide(draft, candidates, recent_use_memories=recent_use_memories) or []
+        )
+    except TypeError:
+        # Legacy deciders / stubs that don't accept the kwarg.
+        raw_decisions = decide(draft, candidates) or []
     decisions = _filter_and_cap_decisions(draft, raw_decisions, config)
 
     results: list[tuple[str, Memory]] = []
@@ -157,8 +169,59 @@ def reconcile_draft(
         results.append(("created", new))
 
     _apply_reciprocity(results, conn, config)
+    _apply_feedback_to_targets(decisions, draft, conn, config)
 
     return results
+
+
+def _apply_feedback_to_targets(
+    decisions: list[Decision],
+    draft: DraftItem,
+    conn,
+    config: VaultConfig,
+) -> None:
+    """Route emotional feedback to the memories that were the actual target.
+
+    When the user reacts to the agent's previous use of memory ("you remembered
+    well", "I already told you"), the judge marks `emotional=true` AND lists
+    the memories that received the feedback in `feedback_targets`. Without
+    this hook the boost would land on the new memory describing the feedback
+    instead of the original memories that earned it.
+
+    Cap at MAX_FEEDBACK_TARGETS_PER_DECISION per decision; dead refs are
+    audited and skipped.
+    """
+    now = datetime.now(UTC)
+    for decision in decisions:
+        if not decision.emotional or not decision.feedback_targets:
+            continue
+        targets = decision.feedback_targets[:MAX_FEEDBACK_TARGETS_PER_DECISION]
+        for target_id in targets:
+            target = _load(conn, config, target_id)
+            if target is None:
+                storage.write_audit(
+                    config,
+                    "feedback.dropped_dead_reference",
+                    draft_id=draft.id,
+                    target_id=target_id,
+                    reason="target_not_found",
+                )
+                continue
+            new_score, new_floor = scoring.apply_emotion_trigger(
+                target.score, target.emotion_floor, config.score
+            )
+            target.score = new_score
+            target.emotion_floor = new_floor
+            target.last_scored = now
+            storage.write_memory(config, target, conn)
+            storage.write_audit(
+                config,
+                "feedback.applied_to_target",
+                draft_id=draft.id,
+                target_id=target.id,
+                sentiment=decision.feedback_sentiment or "feedback",
+                new_emotion_floor=new_floor,
+            )
 
 
 def _finalise_go_deeper(
@@ -427,7 +490,10 @@ def _apply_merge(target: Memory, decision: Decision, config: VaultConfig) -> Mem
     now = datetime.now(UTC)
     target.score = config.score.initial
     target.last_scored = now
-    if decision.emotional:
+    if decision.emotional and not decision.feedback_targets:
+        # When feedback_targets is set, the reinforcement is routed to those
+        # memories instead. The new/merged memory here is just the receipt of
+        # the feedback turn, not the original subject of the praise/correction.
         target.score, target.emotion_floor = scoring.apply_emotion_trigger(
             target.score, target.emotion_floor, config.score
         )
@@ -449,7 +515,9 @@ def _build_new(draft: DraftItem, decision: Decision, config: VaultConfig) -> Mem
         content=decision.content or draft.content,
         go_deeper=decision.go_deeper,
     )
-    if decision.emotional:
+    if decision.emotional and not decision.feedback_targets:
+        # Same rationale as _apply_merge: don't double-count by also boosting
+        # the new "receipt" memory when feedback_targets routes the boost.
         memory.score, memory.emotion_floor = scoring.apply_emotion_trigger(
             memory.score, memory.emotion_floor, config.score
         )

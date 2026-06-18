@@ -606,6 +606,136 @@ def test_reconcile_caps_go_deeper_per_memory(tmp_path):
     assert "go_deeper.capped" in events
 
 
+def test_reconcile_routes_feedback_emotion_to_targets(tmp_path):
+    """Praise about a recalled memory boosts emotion_floor on the original,
+    not on the new memory describing the feedback."""
+    config = make_config(tmp_path)
+    with storage.open_db(config) as conn:
+        seed(
+            config,
+            conn,
+            id="seneca-pref",
+            major_tags=["preferences"],
+            synopsis="Usuário está lendo A Brevidade da Vida de Sêneca.",
+            content="Preferência atual de leitura.",
+            emotion_floor=0,
+        )
+
+    draft = DraftItem(
+        id="d-feedback",
+        content="Usuário elogiou ter lembrado do Sêneca.",
+    )
+
+    def decide(_draft, _cands):
+        return Decision(
+            action="create",
+            major_tags=["preferences"],
+            synopsis="Feedback positivo do usuário sobre lembrar da leitura de Sêneca.",
+            content="Usuário ficou impressionado com a memória.",
+            emotional=True,
+            feedback_targets=["seneca-pref"],
+            feedback_sentiment="positive",
+        )
+
+    with storage.open_db(config) as conn:
+        reconcile.reconcile_draft(conn, draft, config, _single(decide))
+        target_row = conn.execute(
+            "SELECT emotion_floor FROM memories WHERE id = ?", ("seneca-pref",)
+        ).fetchone()
+
+    assert target_row["emotion_floor"] == 40  # first emotional trigger
+    events = [e["event"] for e in storage.read_audit(config)]
+    assert "feedback.applied_to_target" in events
+
+
+def test_reconcile_drops_dead_feedback_target(tmp_path):
+    config = make_config(tmp_path)
+    draft = DraftItem(id="d", content="Feedback")
+
+    def decide(_draft, _cands):
+        return Decision(
+            action="create",
+            major_tags=["preferences"],
+            synopsis="Memória de feedback com synopsis bem comprida para passar o guard.",
+            content="Conteúdo.",
+            emotional=True,
+            feedback_targets=["ghost-id"],
+            feedback_sentiment="positive",
+        )
+
+    with storage.open_db(config) as conn:
+        reconcile.reconcile_draft(conn, draft, config, _single(decide))
+
+    events = [e["event"] for e in storage.read_audit(config)]
+    assert "feedback.dropped_dead_reference" in events
+    assert "feedback.applied_to_target" not in events
+
+
+def test_reconcile_caps_feedback_targets(tmp_path):
+    config = make_config(tmp_path)
+    with storage.open_db(config) as conn:
+        for i in range(reconcile.MAX_FEEDBACK_TARGETS_PER_DECISION + 2):
+            seed(
+                config,
+                conn,
+                id=f"target-{i}",
+                major_tags=["preferences"],
+                synopsis=f"Memória alvo {i}",
+            )
+
+    draft = DraftItem(id="d", content="Feedback amplo")
+
+    def decide(_draft, _cands):
+        return Decision(
+            action="create",
+            major_tags=["preferences"],
+            synopsis="Synopsis bem comprida para passar o guard de anti-fake.",
+            content="Conteúdo.",
+            emotional=True,
+            feedback_targets=[
+                f"target-{i}"
+                for i in range(reconcile.MAX_FEEDBACK_TARGETS_PER_DECISION + 2)
+            ],
+            feedback_sentiment="positive",
+        )
+
+    with storage.open_db(config) as conn:
+        reconcile.reconcile_draft(conn, draft, config, _single(decide))
+        boosted = [
+            row[0]
+            for row in conn.execute(
+                "SELECT id FROM memories WHERE emotion_floor > 0"
+            ).fetchall()
+        ]
+
+    assert len(boosted) == reconcile.MAX_FEEDBACK_TARGETS_PER_DECISION
+
+
+def test_reconcile_emotional_without_feedback_targets_keeps_legacy_behaviour(tmp_path):
+    """Pre-existing path: emotional=true with no feedback_targets still boosts the
+    new memory itself (legacy correction flow)."""
+    config = make_config(tmp_path)
+    draft = DraftItem(id="d", content="Correção do usuário")
+
+    def decide(_draft, _cands):
+        return Decision(
+            action="create",
+            major_tags=["preferences"],
+            synopsis="Synopsis bem comprida sobre correção feita pelo usuário ao agente.",
+            content="API key fica no .env, não perguntar de novo.",
+            emotional=True,
+        )
+
+    with storage.open_db(config) as conn:
+        _, mem = _only(
+            reconcile.reconcile_draft(conn, draft, config, _single(decide))
+        )
+
+    assert mem.emotion_floor == 40
+    events = [e["event"] for e in storage.read_audit(config)]
+    assert "feedback.applied_to_target" not in events
+
+
 def test_reconcile_rejects_thin_decisions_when_decomposing(tmp_path):
     """When the LLM fragments into many decisions but some are empty/short,
     drop the thin ones. A single-decision draft is exempt (legacy behaviour)."""
