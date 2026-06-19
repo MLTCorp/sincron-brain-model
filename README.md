@@ -6,7 +6,7 @@ Any project with an AI can plug in and gain structured long-term memory inspired
 
 ## Status
 
-`0.1.0` — scaffold. Core storage, MCP tools, CLI working. Full LLM-as-judge sleep loop is the next milestone.
+`0.1.0` — early release. Storage, MCP tools, CLI, and the full LLM-as-judge sleep loop (provider sniffing, retries, decay, reactivation, emotional-floor routing, multi-major draft decomposition) are all live. APIs may still shift before `0.2.0`.
 
 ## Design principles
 
@@ -194,9 +194,12 @@ After restart, your agent will have access to these tools:
 | `list_memories_by_date(date, field, limit)` | List memories created/used/scored on a date. |
 | `use_memories(memory_ids, reason)` | Main path to fetch full memory content and queue sleep-time reactivation. |
 | `read_memory(memory_id)` | Neutral inspection/debug escape hatch; not the normal answer path. |
+| `list_neighbors(memory_id, depth, limit)` | Expand a memory's neighbourhood via `go_deeper` edges in one call. |
 | `search(query, limit)` | Full-text fallback when tag navigation isn't enough. |
 | `sleep_now()` | Force indexing job to run immediately. |
 | `stats()` | Vault diagnostics. |
+| `set_judge_key(api_key, provider)` | Persist a judge API key into the vault `.env` and ping the provider end-to-end. |
+| `verify_judge()` | Run a small completion against the configured judge to confirm liveness. |
 
 ## Debug viewer
 
@@ -218,18 +221,19 @@ memory/_viewer.html
 Open that file in a browser to inspect memories, sleeps, audit events, queues,
 Major Tags, tags, scores, emotional floors, and `go_deeper` links. The viewer is
 a snapshot for debugging; it is not required for the MCP server to work. By
-default, it omits full memory bodies so the generated HTML is safer to share
-inside a local debugging flow.
+default, it embeds full memory bodies so the snapshot is useful for local
+inspection — keep the file local.
 
 The `Grafo` tab draws a local memory map: each node is a memory, `go_deeper`
 links are rendered as arrows, and the vertical position shows how close each
 memory is to the access surface (`score 100` at the top, lower scores deeper).
 
-When you need to inspect complete memory content, opt in explicitly:
+When you need a snapshot safe to share (e.g., pasting into an issue), opt out
+of bodies explicitly:
 
 ```powershell
-# Embed full memory bodies. Keep this HTML local.
-sincron-brain viewer --include-content
+# Synopses only, no memory bodies embedded.
+sincron-brain viewer --summary-only
 ```
 
 For large vaults, generate lighter snapshots:
@@ -241,7 +245,7 @@ sincron-brain viewer --limit 1000
 
 The full vault statistics, Major Tag totals, common tag totals, queues, sleeps,
 and recent audit events remain visible. `--limit` only controls how many memory
-cards are embedded in the HTML; `--include-content` controls whether full memory
+cards are embedded in the HTML; `--summary-only` controls whether full memory
 bodies are embedded.
 
 ## Local benchmark

@@ -113,13 +113,13 @@ def recent_use_memories_targets(
     if not events:
         return []
     recent = events[-window_n:]
-    seen: dict[str, str] = {}
-    for event in recent:
+    seen: dict[str, tuple[int, str]] = {}
+    for idx, event in enumerate(recent):
         ts = event.get("ts", "")
         for memory_id in event.get("found_ids") or []:
             if not isinstance(memory_id, str):
                 continue
-            seen[memory_id] = ts  # later events overwrite — last-used ts wins
+            seen[memory_id] = (idx, ts)  # later events overwrite — last-used wins
 
     if not seen:
         return []
@@ -131,21 +131,24 @@ def recent_use_memories_targets(
     ).fetchall()
     by_id = {row["id"]: row for row in rows}
 
-    out: list[dict] = []
-    for memory_id, ts in seen.items():
+    out: list[tuple[int, dict]] = []
+    for memory_id, (idx, ts) in seen.items():
         row = by_id.get(memory_id)
         if row is None:
             continue
         out.append(
-            {
-                "id": memory_id,
-                "major_tags": json.loads(row["major_tags"]),
-                "synopsis": row["synopsis"],
-                "last_used_ts": ts,
-            }
+            (
+                idx,
+                {
+                    "id": memory_id,
+                    "major_tags": json.loads(row["major_tags"]),
+                    "synopsis": row["synopsis"],
+                    "last_used_ts": ts,
+                },
+            )
         )
-    out.sort(key=lambda m: m["last_used_ts"], reverse=True)
-    return out
+    out.sort(key=lambda pair: pair[0], reverse=True)
+    return [pair[1] for pair in out]
 
 
 def read_audit(config: VaultConfig) -> list[dict]:

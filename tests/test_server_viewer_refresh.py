@@ -51,8 +51,8 @@ def test_sleep_now_refreshes_existing_viewer(tmp_path, monkeypatch):
     merge memories) without telling the viewer, so `stats()` and the viewer
     disagreed on the count until the next remember()/use_memories() touched it.
     """
-    from sincron_brain.models import DraftItem
     from sincron_brain import server
+    from sincron_brain.models import DraftItem
 
     config = VaultConfig(vault_path=tmp_path)
     storage.ensure_vault(config)

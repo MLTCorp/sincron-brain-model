@@ -49,7 +49,7 @@ class Decision:
     feedback_sentiment: Literal["positive", "negative", "neutral", ""] = ""
 
 
-Decider = Callable[[DraftItem, list[Candidate]], list[Decision]]
+Decider = Callable[..., list[Decision]]
 
 MAX_DECISIONS_PER_DRAFT = 4
 MIN_SYNOPSIS_CHARS = 40
@@ -262,7 +262,7 @@ def _auto_extend_go_deeper(
         if len(added) >= AUTO_FTS_GO_DEEPER_LIMIT:
             break
         cid = candidate.id
-        if cid in seen or cid == merge_target_id or cid == source_id:
+        if cid in seen or cid in (merge_target_id, source_id):
             continue
         added.append(cid)
         seen.add(cid)
