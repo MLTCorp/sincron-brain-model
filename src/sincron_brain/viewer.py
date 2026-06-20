@@ -868,7 +868,7 @@ function init() {{
   if (DATA.generated_at) {{
     const ts = new Date(DATA.generated_at);
     const formatted = isNaN(ts.getTime()) ? DATA.generated_at : ts.toLocaleString();
-    snapshotEl.textContent = `Snapshot estático de ${{formatted}}. F5 não atualiza — rode \`sincron-brain viewer\` ou deixe o agente rodar uma tool de mutação para regenerar.`;
+    snapshotEl.textContent = `Snapshot estático de ${{formatted}}. F5 não atualiza — rode \\`sincron-brain viewer\\` ou deixe o agente rodar uma tool de mutação para regenerar.`;
   }}
   const viewer = DATA.viewer || {{}};
   const viewerMode = document.getElementById('viewerMode');
