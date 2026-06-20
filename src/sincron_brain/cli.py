@@ -133,6 +133,40 @@ def _write_initial_viewer(config: VaultConfig) -> Path:
     return write_viewer(config)
 
 
+def _print_schedule_status(config: VaultConfig) -> None:
+    """Register the nightly sleep job on the host OS and report the outcome.
+
+    On success: a short green confirmation. On failure: a highlighted heading
+    plus a machine-readable remediation block so the AI assistant running the
+    install can finish the setup (and a human has a copy-paste command).
+    """
+    from sincron_brain import scheduler
+
+    result = scheduler.maybe_install_schedule(config)
+    console.print()
+    if result is None:
+        console.print(
+            f"[dim]Nightly sleep: scheduling skipped "
+            f"({scheduler.SKIP_ENV} set). Configure the OS scheduler yourself.[/]"
+        )
+        return
+    if result.skipped:
+        console.print(f"[dim]Nightly sleep: {result.detail}[/]")
+        return
+    if result.ok:
+        console.print(f"[bold]Nightly sleep:[/] [green]SCHEDULED[/]  {result.detail}")
+        return
+
+    console.print(
+        "[bold yellow]Nightly sleep: NOT SCHEDULED[/]  "
+        "[yellow](indexing will not run automatically until this is fixed)[/]"
+    )
+    if result.manual_command:
+        console.print("[bold]Run this once to schedule it (no admin needed):[/]")
+        console.print(f"  {result.manual_command}")
+    console.print(scheduler.render_ai_remediation(result, config))
+
+
 def _print_judge_status(config: VaultConfig) -> None:
     """Surface whether the sleep judge can actually run, or will fall back."""
     from sincron_brain import judge
@@ -392,12 +426,16 @@ def connect(
     console.print(f"[green]Viewer ready:[/] {viewer_path}")
     console.print(f"[green]Env template:[/] {env_file}  [dim](edit to add LLM_API_KEY)[/]")
     console.print(f"[green]Vault .gitignore:[/] {gitignore_file}")
+    _print_schedule_status(config)
     _print_default_major_tags()
     _print_judge_status(config)
     console.print()
     console.print("[bold]Next steps:[/]")
     console.print("  1. Restart your MCP client/agent.")
-    console.print("  2. Run: sincron-brain stats")
+    console.print(
+        "  2. Run: sincron-brain stats  "
+        "[dim](check 'Total memories' grows after each night)[/]"
+    )
 
 
 @app.command("set-judge")
@@ -489,12 +527,20 @@ def serve() -> None:
 
 
 @app.command("sleep-now")
-def sleep_now() -> None:
+def sleep_now(
+    vault: Annotated[
+        Path | None,
+        typer.Option(
+            "--vault",
+            help="Vault directory. Overrides SINCRON_BRAIN_VAULT. Used by the OS scheduler.",
+        ),
+    ] = None,
+) -> None:
     """Force the sleep/indexing job to run now."""
     from sincron_brain import judge
     from sincron_brain.sleep import run_sleep
 
-    config = _load_or_die()
+    config = _load_or_die(vault)
     console.print("[bold]Running sleep job...[/]")
     result = run_sleep(config, decide=judge.default_decider(config))
     console.print(
@@ -652,11 +698,15 @@ def benchmark(
     console.print(storage_table)
 
 
-def _load_or_die() -> VaultConfig:
+def _load_or_die(explicit: Path | None = None) -> VaultConfig:
     vault_value = (
-        os.environ.get("SINCRON_BRAIN_VAULT")
-        or _vault_path_from_project_mcp_config(Path.cwd())
-        or str(_default_vault_path())
+        str(explicit)
+        if explicit is not None
+        else (
+            os.environ.get("SINCRON_BRAIN_VAULT")
+            or _vault_path_from_project_mcp_config(Path.cwd())
+            or str(_default_vault_path())
+        )
     )
     vault = Path(vault_value)
     try:

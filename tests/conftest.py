@@ -29,6 +29,16 @@ def _clear_judge_envs(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _no_os_schedule(monkeypatch):
+    """Never let `connect` register a real OS Scheduled Task / cron during tests.
+
+    Scheduler logic is covered directly in test_scheduler.py with a fake runner.
+    Tests that want to assert the live scheduling path delenv this var themselves.
+    """
+    monkeypatch.setenv("SINCRON_BRAIN_NO_SCHEDULE", "1")
+
+
+@pytest.fixture(autouse=True)
 def _sync_viewer_refresh_in_tests(monkeypatch):
     """Force the viewer refresh to be synchronous so tests can read the file
     immediately after the helper returns. Production keeps the async path."""

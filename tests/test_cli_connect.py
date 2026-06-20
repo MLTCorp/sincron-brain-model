@@ -501,6 +501,83 @@ def test_set_judge_rejects_unsupported_provider(tmp_path):
     assert "Unsupported provider" in result.output
 
 
+def test_connect_skips_schedule_when_env_set_but_says_so(tmp_path, monkeypatch):
+    monkeypatch.setenv("SINCRON_BRAIN_NO_SCHEDULE", "1")
+    project = tmp_path / "project"
+    vault = tmp_path / "memory"
+    project.mkdir()
+
+    result = runner.invoke(app, ["connect", "--path", str(vault), "--project", str(project)])
+
+    assert result.exit_code == 0
+    assert "scheduling skipped" in result.output
+
+
+def test_connect_schedules_nightly_sleep(tmp_path, monkeypatch):
+    from sincron_brain import scheduler
+
+    monkeypatch.delenv("SINCRON_BRAIN_NO_SCHEDULE", raising=False)
+    project = tmp_path / "project"
+    vault = tmp_path / "memory"
+    project.mkdir()
+
+    monkeypatch.setattr(
+        scheduler,
+        "install_schedule",
+        lambda config, **kw: scheduler.ScheduleResult(
+            ok=True,
+            system="linux",
+            method="crontab",
+            detail="Linux user crontab entry '0 3 * * *'.",
+        ),
+    )
+
+    result = runner.invoke(app, ["connect", "--path", str(vault), "--project", str(project)])
+
+    assert result.exit_code == 0
+    assert "Nightly sleep: SCHEDULED" in result.output
+
+
+def test_connect_emits_ai_remediation_when_scheduling_fails(tmp_path, monkeypatch):
+    from sincron_brain import scheduler
+
+    monkeypatch.delenv("SINCRON_BRAIN_NO_SCHEDULE", raising=False)
+    project = tmp_path / "project"
+    vault = tmp_path / "memory"
+    project.mkdir()
+
+    monkeypatch.setattr(
+        scheduler,
+        "install_schedule",
+        lambda config, **kw: scheduler.ScheduleResult(
+            ok=False,
+            system="linux",
+            method="crontab",
+            manual_command="(crontab -l; echo x) | crontab -",
+            error="crontab: command not found",
+        ),
+    )
+
+    result = runner.invoke(app, ["connect", "--path", str(vault), "--project", str(project)])
+
+    assert result.exit_code == 0
+    assert "Nightly sleep: NOT SCHEDULED" in result.output
+    assert "AI_ACTION_REQUIRED" in result.output
+    assert "crontab: command not found" in result.output
+
+
+def test_sleep_now_accepts_vault_option(tmp_path):
+    project = tmp_path / "project"
+    vault = tmp_path / "memory"
+    project.mkdir()
+    runner.invoke(app, ["connect", "--path", str(vault), "--project", str(project)])
+
+    result = runner.invoke(app, ["sleep-now", "--vault", str(vault)])
+
+    assert result.exit_code == 0
+    assert "processed=" in result.output
+
+
 def test_stats_uses_local_project_mcp_config(tmp_path, monkeypatch):
     project = tmp_path / "project"
     vault = tmp_path / "memory"

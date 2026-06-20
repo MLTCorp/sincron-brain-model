@@ -106,6 +106,24 @@ instruction block to `AGENTS.md`/`CLAUDE.md`, so agents know when to consult
 `use_memories()` and when to save durable facts with `remember()` or full
 conversation turns with `remember_turn()`.
 
+`connect` also **registers the nightly sleep job with the host OS scheduler** so
+indexing actually runs at the configured time (default 03:00) without any extra
+setup. It is cross-platform and runs at the current-user level (no admin/root):
+a **Scheduled Task** on Windows, a **LaunchAgent** on macOS, and a **user
+crontab** entry on Linux/VPS. Re-running `connect` is idempotent — each vault has
+a deterministic job id, so it updates the existing job instead of duplicating it.
+The scheduled command is `sincron-brain sleep-now --vault <vault>`.
+
+Keeping the machine powered on at that time is the operator's responsibility (a
+laptop that is off at 03:00 simply runs the next time it is on, if you adjust the
+schedule, or you can run `sincron-brain sleep-now` manually). To confirm indexing
+is happening, run `sincron-brain stats` and watch the totals grow. If automatic
+scheduling fails (e.g. the scheduler binary is missing or the cron is not a
+simple daily time), `connect` prints a copy-paste command plus an
+`AI_ACTION_REQUIRED` remediation block so the AI assistant running the install
+can finish the setup. Set `SINCRON_BRAIN_NO_SCHEDULE=1` to opt out and wire your
+own scheduler.
+
 ```json
 {
   "mcpServers": {
