@@ -118,7 +118,7 @@ def test_install_windows_failure_surfaces_error(tmp_path):
     fake = FakeRunner(results={"schtasks /Create": FakeProc(returncode=1, stderr="access denied")})
     result = scheduler.install_windows(["sincron-brain"], tmp_path / "m", 3, 0, runner=fake)
     assert not result.ok
-    assert "access denied" in result.error
+    assert result.error is not None and "access denied" in result.error
     assert result.manual_command.startswith("schtasks")
 
 
@@ -200,7 +200,7 @@ def test_install_schedule_untranslatable_cron_returns_remediation(tmp_path):
     result = scheduler.install_schedule(config, runner=fake, system="windows")
 
     assert not result.ok
-    assert "not a simple daily schedule" in result.error
+    assert result.error is not None and "not a simple daily schedule" in result.error
     assert fake.calls == []  # never attempted to run schtasks
 
 
